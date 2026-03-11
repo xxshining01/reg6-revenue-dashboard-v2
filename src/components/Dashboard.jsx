@@ -4,7 +4,7 @@ import {
   BarChart, Bar, AreaChart, Area, PieChart, Pie, Cell, 
   XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend, ComposedChart, Line
 } from 'recharts';
-import { Activity, DollarSign, TrendingUp, TrendingDown, RefreshCw, AlertCircle, Filter, Target, MapPin, Layers, ChevronRight, ChevronDown, Sparkles } from 'lucide-react';
+import { Activity, DollarSign, TrendingUp, TrendingDown, RefreshCw, AlertCircle, Filter, Target, MapPin, Layers, ChevronRight, ChevronDown, Sparkles, Sun, Moon } from 'lucide-react';
 import { MapContainer, TileLayer, GeoJSON } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 
@@ -40,7 +40,7 @@ const GaugeChart = ({ title, actual, target, isIncome }) => {
   ];
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', padding: '1rem', background: 'rgba(255,255,255,0.02)', borderRadius: '12px' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', padding: '1rem', background: 'var(--bg-highlight)', borderRadius: '12px' }}>
       <h4 style={{ fontSize: '0.9rem', fontWeight: '500', color: 'var(--text-secondary)', marginBottom: '0.75rem', textAlign: 'center' }}>{title}</h4>
       <div style={{ width: '100%', height: '140px', position: 'relative' }}>
         <ResponsiveContainer width="100%" height="100%">
@@ -58,7 +58,7 @@ const GaugeChart = ({ title, actual, target, isIncome }) => {
               isAnimationActive={true}
             >
               <Cell fill={color} />
-              <Cell fill="rgba(255,255,255,0.08)" />
+              <Cell fill="var(--glass-border)" />
             </Pie>
           </PieChart>
         </ResponsiveContainer>
@@ -81,6 +81,11 @@ const Dashboard = () => {
 
   // Filters & State
   const [activeTab, setActiveTab] = useState('income');
+  const [theme, setTheme] = useState('dark');
+
+  useEffect(() => {
+    document.body.setAttribute('data-theme', theme);
+  }, [theme]);
   const [selectedYear, setSelectedYear] = useState('');
   const [availableYears, setAvailableYears] = useState([]);
   const [selectedMonth, setSelectedMonth] = useState('ทั้งหมด');
@@ -279,11 +284,11 @@ const Dashboard = () => {
   const toggleProv = (provName) => setExpandedProvs(prev => ({ ...prev, [provName]: !prev[provName] }));
 
   const getProvinceStyle = (feature) => {
-    if (!processed) return { fillColor: '#333', weight: 1, opacity: 1, color: '#000', fillOpacity: 0.7 };
+    if (!processed) return { fillColor: theme === 'light' ? '#e2e8f0' : '#333', weight: 1, opacity: 1, color: '#000', fillOpacity: 0.7 };
     const thName = PROVINCE_MAP_EN_TH[feature.properties.NAME_1];
     const data = processed.provinceAgg[thName];
 
-    if (!data || data.target === 0) return { fillColor: '#333', weight: 1, opacity: 1, color: '#000', fillOpacity: 0.7 };
+    if (!data || data.target === 0) return { fillColor: theme === 'light' ? '#e2e8f0' : '#333', weight: 1, opacity: 1, color: '#000', fillOpacity: 0.7 };
 
     const pct = (data.actual / data.target) * 100;
     
@@ -296,7 +301,7 @@ const Dashboard = () => {
     else fillColor = '#ef4444';
 
     const isTargetProv = selectedProvince === 'ทั้งหมด' || selectedProvince === thName;
-    return { fillColor, weight: 1, opacity: 1, color: 'rgba(255,255,255,0.2)', fillOpacity: isTargetProv ? 0.8 : 0.2 };
+    return { fillColor, weight: 1, opacity: 1, color: theme === 'light' ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.2)', fillOpacity: isTargetProv ? 0.8 : 0.2 };
   };
 
   const onEachFeature = (feature, layer) => {
@@ -333,7 +338,7 @@ const Dashboard = () => {
       <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'inline-block', width: '35px', textAlign: 'right' }}>
          {pct.toFixed(1)}%
       </span>
-      <div style={{ width: '40px', height: '6px', background: 'rgba(255,255,255,0.1)', borderRadius: '3px', overflow: 'hidden' }}>
+      <div style={{ width: '40px', height: '6px', background: 'var(--line-color)', borderRadius: '3px', overflow: 'hidden' }}>
         <div style={{ width: `${Math.min(pct, 100)}%`, height: '100%', background: themeColor, borderRadius: '3px' }}></div>
       </div>
     </div>
@@ -344,9 +349,9 @@ const Dashboard = () => {
       
       {/* App Header w/ Tabs */}
       <div className="glass-panel" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem 1.5rem', borderRadius: '16px' }}>
-        <h1 style={{ fontWeight: '700', fontSize: '1.5rem', margin: 0, color: '#fff' }}>ระบบรายงานผลประกอบการ (8 จังหวัดภาคเหนือตอนล่าง)</h1>
+        <h1 style={{ fontWeight: '700', fontSize: '1.5rem', margin: 0, color: 'var(--text-primary)' }}>ระบบรายงานผลประกอบการ (8 จังหวัดภาคเหนือตอนล่าง)</h1>
         
-        <div style={{ display: 'flex', background: 'rgba(0,0,0,0.3)', borderRadius: '12px', padding: '0.25rem' }}>
+        <div style={{ display: 'flex', background: 'var(--bg-panel-tertiary)', borderRadius: '12px', padding: '0.25rem' }}>
           <button 
             onClick={() => setActiveTab('income')} 
             style={{ 
@@ -423,7 +428,7 @@ const Dashboard = () => {
 
               <div style={{ background: `rgba(${isIncome ? '45,212,191' : '244,63,94'},0.15)`, padding: '1.25rem', borderRadius: '16px', border: `1px solid ${themeColor}40` }}>
                 <div style={{ color: themeColor, fontSize: '0.875rem', marginBottom: '0.25rem', fontWeight: '500' }}>รวมยอดสะสม</div>
-                <div style={{ fontSize: '2.5rem', fontWeight: '700', color: '#fff' }}>{formatAmt(processed.totals.actual)}</div>
+                <div style={{ fontSize: '2.5rem', fontWeight: '700', color: 'var(--text-primary)' }}>{formatAmt(processed.totals.actual)}</div>
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1rem' }}>
@@ -435,7 +440,7 @@ const Dashboard = () => {
              {/* Top Provinces Map */}
              <div className="glass-panel" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', height: '400px' }}>
                 <h3 style={{ fontSize: '1rem', fontWeight: '600', marginBottom: '1rem', color: 'var(--text-primary)' }}>แผนที่ผลงานจังหวัด</h3>
-                <div style={{ flex: 1, borderRadius: '12px', overflow: 'hidden', background: '#0a0a0a' }}>
+                <div style={{ flex: 1, borderRadius: '12px', overflow: 'hidden', background: 'var(--bg-panel)' }}>
                   <MapContainer center={[16.2, 99.8]} zoom={6.5} style={{ height: '100%', width: '100%' }} zoomControl={false} scrollWheelZoom={false}>
                     <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png" />
                     {geoData && <GeoJSON key={activeTab + selectedYear + selectedMonth} data={geoData} style={getProvinceStyle} onEachFeature={onEachFeature} />}
@@ -452,29 +457,29 @@ const Dashboard = () => {
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <span style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>ปี พ.ศ.</span>
                 <select value={selectedYear} onChange={e => setSelectedYear(parseInt(e.target.value))} className="filter-select">
-                  {availableYears.map(y => <option key={y} value={y} style={{color: '#000'}}>{y}</option>)}
+                  {availableYears.map(y => <option key={y} value={y} >{y}</option>)}
                 </select>
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <span style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>เดือน</span>
                 <select value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)} className="filter-select">
-                  <option value="ทั้งหมด" style={{color: '#000'}}>ทุกเดือน</option>
-                  {MONTH_NAMES.map((m, i) => <option key={i} value={i+1} style={{color: '#000'}}>{m}</option>)}
+                  <option value="ทั้งหมด" >ทุกเดือน</option>
+                  {MONTH_NAMES.map((m, i) => <option key={i} value={i+1} >{m}</option>)}
                 </select>
               </div>
 
-              <div style={{ width: '1px', height: '20px', background: 'rgba(255,255,255,0.1)' }}></div>
+              <div style={{ width: '1px', height: '20px', background: 'var(--line-color)' }}></div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <span style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>พื้นที่</span>
                 <select value={selectedProvince} onChange={e => setSelectedProvince(e.target.value)} className="filter-select">
-                  <option value="ทั้งหมด" style={{color: '#000'}}>ทุกจังหวัด (8 จังหวัด)</option>
-                  {availableProvinces.map(p => <option key={p} value={p} style={{color: '#000'}}>{p}</option>)}
+                  <option value="ทั้งหมด" >ทุกจังหวัด (8 จังหวัด)</option>
+                  {availableProvinces.map(p => <option key={p} value={p} >{p}</option>)}
                 </select>
                 <select value={selectedOffice} onChange={e => setSelectedOffice(e.target.value)} className="filter-select" style={{maxWidth: '180px'}}>
-                  <option value="ทั้งหมด" style={{color: '#000'}}>ทุกที่ทำการ</option>
-                  {availableOffices.map(o => <option key={o} value={o} style={{color: '#000'}}>{o}</option>)}
+                  <option value="ทั้งหมด" >ทุกที่ทำการ</option>
+                  {availableOffices.map(o => <option key={o} value={o} >{o}</option>)}
                 </select>
               </div>
 
@@ -495,7 +500,7 @@ const Dashboard = () => {
                       <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
                       <XAxis dataKey="name" stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)', fontSize: 11 }} axisLine={false} tickLine={false} />
                       <YAxis stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)', fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={formatAmt} />
-                      <RechartsTooltip formatter={(v) => formatFullAmt(v)} contentStyle={{ backgroundColor: 'rgba(9, 9, 11, 0.95)', border: 'none', borderRadius: '8px' }} />
+                      <RechartsTooltip formatter={(v) => formatFullAmt(v)} contentStyle={{ backgroundColor: 'var(--tooltip-bg)', border: 'none', borderRadius: '8px' }} />
                       <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
                       <Bar dataKey="actual" name="ผลงาน" fill={themeColor} radius={[4, 4, 0, 0]} barSize={35} />
                       <Line type="monotone" dataKey="target" name="เป้าหมาย" stroke="#fcd34d" strokeWidth={3} dot={{ r: 4 }} />
@@ -513,7 +518,7 @@ const Dashboard = () => {
                        <h3 style={{ fontSize: '1.1rem', fontWeight: '600', color: themeColor }}>เจาะลึกกลุ่มธุรกิจ (Business Group)</h3>
                     </div>
 
-                    <div style={{ display: 'flex', gap: '1rem', padding: '0.75rem 1rem', borderBottom: '1px solid rgba(255,255,255,0.1)', fontWeight: '600', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
+                    <div style={{ display: 'flex', gap: '1rem', padding: '0.75rem 1rem', borderBottom: '1px solid var(--line-color)', fontWeight: '600', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
                         <div style={{ flex: 2.5 }}>กลุ่มธุรกิจ / บริการ</div>
                         <div style={{ flex: 1, textAlign: 'right' }}>ผลงานจริง</div>
                         <div style={{ flex: 1, textAlign: 'right' }}>% สำเร็จ</div>
@@ -525,9 +530,9 @@ const Dashboard = () => {
                            const pct = bg.target > 0 ? (bg.actual / bg.target) * 100 : 0;
                            
                            return (
-                             <div key={idx} style={{ background: 'rgba(255,255,255,0.02)', borderRadius: '8px', overflow: 'hidden' }}>
+                             <div key={idx} style={{ background: 'var(--bg-highlight)', borderRadius: '8px', overflow: 'hidden' }}>
                                <div onClick={() => toggleBG(bg.name)} style={{ display: 'flex', gap: '1rem', padding: '1rem', cursor: 'pointer', alignItems: 'center' }} className="hover:bg-white/5 transition-colors">
-                                  <div style={{ flex: 2.5, display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: '600', color: '#fff', fontSize: '0.95rem' }}>
+                                  <div style={{ flex: 2.5, display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: '600', color: 'var(--text-primary)', fontSize: '0.95rem' }}>
                                      {isExpanded ? <ChevronDown size={18} color={themeColor} /> : <ChevronRight size={18} color="var(--text-secondary)" />}
                                      <span title={bg.name} style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '180px' }}>{bg.name}</span>
                                   </div>
@@ -536,16 +541,16 @@ const Dashboard = () => {
                                </div>
 
                                {isExpanded && (
-                                 <div style={{ background: 'rgba(0,0,0,0.2)', padding: '0.5rem 0' }}>
+                                 <div style={{ background: 'var(--bg-panel-secondary)', padding: '0.5rem 0' }}>
                                    {bg.evms.map((evm, eidx) => {
                                       let evmPct = evm.target > 0 ? (evm.actual / evm.target) * 100 : 0;
                                       return (
-                                         <div key={eidx} style={{ display: 'flex', gap: '0.5rem', padding: '0.5rem 1rem 0.5rem 2.5rem', fontSize: '0.85rem', alignItems: 'center', borderBottom: eidx !== bg.evms.length - 1 ? '1px solid rgba(255,255,255,0.03)' : 'none' }}>
+                                         <div key={eidx} style={{ display: 'flex', gap: '0.5rem', padding: '0.5rem 1rem 0.5rem 2.5rem', fontSize: '0.85rem', alignItems: 'center', borderBottom: eidx !== bg.evms.length - 1 ? '1px solid var(--line-color-faint)' : 'none' }}>
                                             <div style={{ flex: 2.5, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center' }}>
                                               <span style={{ display: 'inline-block', width: '4px', height: '4px', borderRadius: '50%', background: 'var(--text-secondary)', marginRight: '0.5rem' }}></span>
                                               <span title={evm.name} style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '160px' }}>{evm.name}</span>
                                             </div>
-                                            <div style={{ flex: 1, textAlign: 'right', color: '#ccc' }}>{formatFullAmt(evm.actual)}</div>
+                                            <div style={{ flex: 1, textAlign: 'right', color: 'var(--text-secondary)' }}>{formatFullAmt(evm.actual)}</div>
                                             <div style={{ flex: 1, textAlign: 'right', color: getPerfColor(evm.actual, evm.target) }}>{evmPct.toFixed(0)}%</div>
                                          </div>
                                       )
@@ -564,7 +569,7 @@ const Dashboard = () => {
                        <h3 style={{ fontSize: '1.1rem', fontWeight: '600', color: themeColor }}>เจาะลึกจังหวัด (Provinces)</h3>
                     </div>
 
-                    <div style={{ display: 'flex', gap: '0.5rem', padding: '0.75rem 1rem', borderBottom: '1px solid rgba(255,255,255,0.1)', fontWeight: '600', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
+                    <div style={{ display: 'flex', gap: '0.5rem', padding: '0.75rem 1rem', borderBottom: '1px solid var(--line-color)', fontWeight: '600', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
                         <div style={{ flex: 2.2 }}>จังหวัด / ที่ทำการ</div>
                         <div style={{ flex: 0.8, textAlign: 'right' }}>ผลงานจริง</div>
                         <div style={{ flex: 0.8, textAlign: 'right' }}>% สำเร็จ</div>
@@ -578,9 +583,9 @@ const Dashboard = () => {
                            const provProp = processed.totals.actual > 0 ? (prov.actual / processed.totals.actual) * 100 : 0;
                            
                            return (
-                             <div key={idx} style={{ background: 'rgba(255,255,255,0.02)', borderRadius: '8px', overflow: 'hidden' }}>
+                             <div key={idx} style={{ background: 'var(--bg-highlight)', borderRadius: '8px', overflow: 'hidden' }}>
                                <div onClick={() => toggleProv(prov.name)} style={{ display: 'flex', gap: '0.5rem', padding: '1rem 0.5rem', cursor: 'pointer', alignItems: 'center' }} className="hover:bg-white/5 transition-colors">
-                                  <div style={{ flex: 2.2, display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: '600', color: '#fff', fontSize: '0.95rem' }}>
+                                  <div style={{ flex: 2.2, display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: '600', color: 'var(--text-primary)', fontSize: '0.95rem' }}>
                                      {isExpanded ? <ChevronDown size={18} color={themeColor} /> : <ChevronRight size={18} color="var(--text-secondary)" />}
                                      <span title={prov.name} style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '140px' }}>{prov.name}</span>
                                   </div>
@@ -590,17 +595,17 @@ const Dashboard = () => {
                                </div>
 
                                {isExpanded && (
-                                 <div style={{ background: 'rgba(0,0,0,0.2)', padding: '0.5rem 0' }}>
+                                 <div style={{ background: 'var(--bg-panel-secondary)', padding: '0.5rem 0' }}>
                                    {prov.offices.map((office, oidx) => {
                                       let officePct = office.target > 0 ? (office.actual / office.target) * 100 : 0;
                                       let officeProp = processed.totals.actual > 0 ? (office.actual / processed.totals.actual) * 100 : 0;
                                       return (
-                                         <div key={oidx} style={{ display: 'flex', gap: '0.5rem', padding: '0.5rem 0.5rem 0.5rem 2.5rem', fontSize: '0.85rem', alignItems: 'center', borderBottom: oidx !== prov.offices.length - 1 ? '1px solid rgba(255,255,255,0.03)' : 'none' }}>
+                                         <div key={oidx} style={{ display: 'flex', gap: '0.5rem', padding: '0.5rem 0.5rem 0.5rem 2.5rem', fontSize: '0.85rem', alignItems: 'center', borderBottom: oidx !== prov.offices.length - 1 ? '1px solid var(--line-color-faint)' : 'none' }}>
                                             <div style={{ flex: 2.2, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center' }}>
                                               <span style={{ display: 'inline-block', width: '4px', height: '4px', borderRadius: '50%', background: 'var(--text-secondary)', marginRight: '0.5rem' }}></span>
                                               <span title={office.name} style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '120px' }}>{office.name}</span>
                                             </div>
-                                            <div style={{ flex: 0.8, textAlign: 'right', color: '#ccc' }}>{formatFullAmt(office.actual)}</div>
+                                            <div style={{ flex: 0.8, textAlign: 'right', color: 'var(--text-secondary)' }}>{formatFullAmt(office.actual)}</div>
                                             <div style={{ flex: 0.8, textAlign: 'right', color: getPerfColor(office.actual, office.target) }}>{officePct.toFixed(0)}%</div>
                                             <MiniBar pct={officeProp} />
                                          </div>
@@ -624,8 +629,8 @@ const Dashboard = () => {
       <style>{`
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
         @keyframes pulse { 0% { opacity: 0.5; } 50% { opacity: 1; } 100% { opacity: 0.5; } }
-        .filter-select { background: rgba(255,255,255,0.1); padding: 0.35rem 0.5rem; border-radius: 8px; color: #fff; border: 1px solid rgba(255,255,255,0.1); outline: none; font-family: Outfit; font-weight: 500;}
-        .hover\\:bg-white\\/5:hover { background-color: rgba(255, 255, 255, 0.05); }
+        .filter-select { background: var(--line-color); padding: 0.35rem 0.5rem; border-radius: 8px; color: #fff; border: 1px solid var(--line-color); outline: none; font-family: Outfit; font-weight: 500;}
+        .hover\\:bg-white\\/5:hover { background-color: var(--line-color-subtle); }
         .transition-colors { transition-property: color, background-color, border-color; transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1); transition-duration: 150ms; }
       `}</style>
     </div>
