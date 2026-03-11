@@ -747,19 +747,19 @@ const Dashboard = () => {
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
                       <span style={{ fontWeight: '600', fontSize: '0.9rem' }}>เลือกจังหวัดที่ต้องการ:</span>
                       <div style={{ display: 'flex', gap: '0.5rem' }}>
-                        <button onClick={() => setSelectedExportProvinces([...availableProvinces])} style={{ background: 'none', border: 'none', color: themeColor, fontSize: '0.8rem', cursor: 'pointer', textDecoration: 'underline' }}>เลือกทั้งหมด</button>
+                        <button onClick={() => setSelectedExportProvinces(['ทั้งหมด', ...availableProvinces])} style={{ background: 'none', border: 'none', color: themeColor, fontSize: '0.8rem', cursor: 'pointer', textDecoration: 'underline' }}>เลือกทั้งหมด</button>
                         <button onClick={() => setSelectedExportProvinces([])} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', fontSize: '0.8rem', cursor: 'pointer', textDecoration: 'underline' }}>ล้างค่า</button>
                       </div>
                     </div>
                     
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
-                      {availableProvinces.map(p => (
+                      {['ทั้งหมด', ...availableProvinces].map(p => (
                         <label key={p} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9rem', cursor: 'pointer', color: 'var(--text-primary)' }}>
                           <input type="checkbox" checked={selectedExportProvinces.includes(p)} onChange={(e) => {
                             if (e.target.checked) setSelectedExportProvinces(prev => [...prev, p]);
                             else setSelectedExportProvinces(prev => prev.filter(x => x !== p));
                           }} style={{ accentColor: themeColor }} />
-                          {p}
+                          {p === 'ทั้งหมด' ? 'ภาพรวม (ทั้งหมด)' : p}
                         </label>
                       ))}
                     </div>
