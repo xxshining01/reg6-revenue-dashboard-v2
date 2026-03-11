@@ -4,7 +4,7 @@ import {
   BarChart, Bar, AreaChart, Area, PieChart, Pie, Cell, 
   XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend, ComposedChart, Line
 } from 'recharts';
-import { Activity, DollarSign, TrendingUp, TrendingDown, RefreshCw, AlertCircle, Filter, Target, MapPin, Layers, ChevronRight, ChevronDown, Sparkles, Sun, Moon, Download } from 'lucide-react';
+import { Activity, DollarSign, TrendingUp, TrendingDown, RefreshCw, AlertCircle, Filter, Target, MapPin, Layers, ChevronRight, ChevronDown, Sparkles, Sun, Moon, Download, Camera } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import { MapContainer, TileLayer, GeoJSON } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -411,7 +411,25 @@ const Dashboard = () => {
   );
 
   return (
-    <div ref={dashboardRef} style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', gap: '1rem', paddingBottom: '3rem' }}>
+    <>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '1rem 1.5rem 0', maxWidth: '100%', boxSizing: 'border-box' }}>
+         <button 
+           onClick={() => setIsExportModalOpen(true)}
+           style={{ 
+             display: 'flex', alignItems: 'center', gap: '0.4rem',
+             padding: '0.6rem 1.25rem', borderRadius: '9999px', border: 'none',
+             background: '#10b981', color: '#ffffff', cursor: 'pointer',
+             fontWeight: '700', fontSize: '0.95rem', boxShadow: '0 4px 6px -1px rgba(16, 185, 129, 0.4)',
+             transition: 'all 0.3s'
+           }}
+           onMouseOver={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 6px 8px -1px rgba(16, 185, 129, 0.5)'; }}
+           onMouseOut={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(16, 185, 129, 0.4)'; }}
+         >
+           <Camera size={20} strokeWidth={2.5} /> Capture รายงาน
+         </button>
+      </div>
+
+      <div ref={dashboardRef} style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', gap: '1rem', paddingBottom: '3rem' }}>
       
       {/* App Header w/ Tabs */}
       <div className="glass-panel" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem 1.5rem', borderRadius: '16px' }}>
@@ -451,18 +469,7 @@ const Dashboard = () => {
           >
             {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
           </button>
-          <button 
-            onClick={() => setIsExportModalOpen(true)}
-            style={{ 
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              width: '42px', height: '42px', borderRadius: '12px', border: '1px solid var(--glass-border)',
-              background: 'var(--bg-panel-tertiary)', color: 'var(--text-primary)', cursor: 'pointer',
-              transition: 'all 0.3s'
-            }}
-            title="บันทึกภาพหน้าจอ"
-          >
-            <Download size={20} />
-          </button>
+
         </div>
       </div>
 
@@ -806,6 +813,7 @@ const Dashboard = () => {
         .transition-colors { transition-property: color, background-color, border-color; transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1); transition-duration: 150ms; }
       `}</style>
     </div>
+    </>
   );
 };
 
