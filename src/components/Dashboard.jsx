@@ -51,11 +51,11 @@ const MultiSelect = ({ options, selected, onChange, placeholder, disabled, style
         className="filter-select"
         style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.6 : 1 }}
       >
-        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '120px' }}>{displayTxt}</span>
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: maximizedPanel === 'drillLoc' ? 'none' : '120px' }}>{displayTxt}</span>
         <ChevronDown size={14} style={{ flexShrink: 0 }} />
       </div>
       {isOpen && !disabled && (
-        <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, marginTop: '4px', background: 'var(--bg-panel)', border: '1px solid var(--glass-border)', borderRadius: '8px', zIndex: 100, maxHeight: '250px', overflowY: 'auto', boxShadow: 'var(--glass-shadow)', padding: '0.5rem' }}>
+        <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, marginTop: '4px', background: 'var(--bg-panel)', border: '1px solid var(--glass-border)', borderRadius: '8px', zIndex: 999999, maxHeight: '250px', overflowY: 'auto', boxShadow: 'var(--glass-shadow)', padding: '0.5rem' }}>
            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.4rem', cursor: 'pointer', borderRadius: '4px' }} className="hover:bg-white/5">
               <input type="checkbox" checked={selected.length === 0} onChange={() => handleToggle('ทั้งหมด')} style={{ accentColor: '#10b981' }} />
               <span style={{ fontSize: '0.85rem' }}>ทั้งหมด</span>
@@ -146,8 +146,8 @@ const BusinessGroupDoughnut = ({ data, maximizedPanel, setMaximizedPanel }) => {
               data={chartData}
               cx="50%"
               cy="50%"
-              innerRadius={50}
-              outerRadius={85}
+              innerRadius="40%"
+              outerRadius="75%"
               paddingAngle={3}
               dataKey="value"
               stroke="none"
@@ -650,7 +650,7 @@ const Dashboard = () => {
                   <button onClick={() => setMaximizedPanel(maximizedPanel === 'map' ? null : 'map')} style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}>{maximizedPanel === 'map' ? <Minimize2 size={24}/> : <Maximize2 size={18}/>}</button>
                 </div>
                 <div style={{ flex: 1, borderRadius: '12px', overflow: 'hidden', background: 'var(--bg-panel)' }}>
-                  <MapContainer center={[16.2, 99.8]} zoom={6.5} style={{ height: '100%', width: '100%' }} zoomControl={false} scrollWheelZoom={false}>
+                  <MapContainer key={maximizedPanel === 'map' ? 'map-max' : 'map-min'} center={[16.2, 99.8]} zoom={6.5} style={{ height: '100%', width: '100%' }} zoomControl={false} scrollWheelZoom={false}>
                     <TileLayer url={`https://{s}.basemaps.cartocdn.com/${theme === 'dark' ? 'dark_nolabels' : 'light_nolabels'}/{z}/{x}/{y}{r}.png`} />
                     {geoData && <GeoJSON key={activeTab + selectedYear + selectedMonth} data={geoData} style={getProvinceStyle} onEachFeature={onEachFeature} />}
                   </MapContainer>
@@ -744,7 +744,7 @@ const Dashboard = () => {
                                <div onClick={() => toggleBG(bg.name)} style={{ display: 'flex', gap: '1rem', padding: '1rem', cursor: 'pointer', alignItems: 'center' }} className="hover:bg-white/5 transition-colors">
                                   <div style={{ flex: 2.5, display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: '600', color: 'var(--text-primary)', fontSize: '0.95rem' }}>
                                      {isExpanded ? <ChevronDown size={18} color={themeColor} /> : <ChevronRight size={18} color="var(--text-secondary)" />}
-                                     <span title={bg.name} style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '180px' }}>{bg.name}</span>
+                                     <span title={bg.name} style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: maximizedPanel === 'drillBG' ? 'none' : '180px' }}>{bg.name}</span>
                                   </div>
                                   <div style={{ flex: 1, textAlign: 'right', fontWeight: 'bold' }}><span title={bg.actual.toLocaleString()}>{formatAmt(bg.actual)}</span></div>
                                   <div style={{ flex: 1, textAlign: 'right', fontWeight: 'bold', color: getPerfColor(bg.actual, bg.target) }}>{pct.toFixed(0)}%</div>
@@ -758,7 +758,7 @@ const Dashboard = () => {
                                          <div key={eidx} style={{ display: 'flex', gap: '0.5rem', padding: '0.5rem 1rem 0.5rem 2.5rem', fontSize: '0.85rem', alignItems: 'center', borderBottom: eidx !== bg.evms.length - 1 ? '1px solid var(--line-color-faint)' : 'none' }}>
                                             <div style={{ flex: 2.5, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center' }}>
                                               <span style={{ display: 'inline-block', width: '4px', height: '4px', borderRadius: '50%', background: 'var(--text-secondary)', marginRight: '0.5rem' }}></span>
-                                              <span title={evm.name} style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '160px' }}>{evm.name}</span>
+                                              <span title={evm.name} style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: maximizedPanel === 'drillBG' ? 'none' : '160px' }}>{evm.name}</span>
                                             </div>
                                             <div style={{ flex: 1, textAlign: 'right', color: 'var(--text-secondary)' }}>{formatFullAmt(evm.actual)}</div>
                                             <div style={{ flex: 1, textAlign: 'right', color: getPerfColor(evm.actual, evm.target) }}>{evmPct.toFixed(0)}%</div>
@@ -774,9 +774,10 @@ const Dashboard = () => {
                 </div>
 
                 {/* Hierarchical Breakdown (Province -> Office) with Proportions*/}
-                <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', flex: 1 }}>
+                <div className="glass-panel" style={maximizedPanel === 'drillLoc' ? { position: 'fixed', top: '2rem', left: '2rem', right: '2rem', bottom: '2rem', zIndex: 9999, display: 'flex', flexDirection: 'column', padding: '2rem' } : { padding: '1.5rem', display: 'flex', flexDirection: 'column', flex: 1 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                       <h3 style={{ fontSize: '1.1rem', fontWeight: '600', color: themeColor }}>เจาะลึกจังหวัด (Provinces)</h3>
+                       <h3 style={{ fontSize: maximizedPanel === 'drillLoc' ? '1.5rem' : '1.1rem', fontWeight: '600', color: themeColor, margin: 0 }}>เจาะลึกจังหวัด (Provinces)</h3>
+                       <button onClick={() => setMaximizedPanel(maximizedPanel === 'drillLoc' ? null : 'drillLoc')} style={{ background: 'transparent', border: 'none', color: themeColor, cursor: 'pointer' }}>{maximizedPanel === 'drillLoc' ? <Minimize2 size={24}/> : <Maximize2 size={18}/>}</button>
                     </div>
 
                     <div style={{ display: 'flex', gap: '0.5rem', padding: '0.75rem 1rem', borderBottom: '1px solid var(--line-color)', fontWeight: '600', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
@@ -797,7 +798,7 @@ const Dashboard = () => {
                                <div onClick={() => toggleProv(prov.name)} style={{ display: 'flex', gap: '0.5rem', padding: '1rem 0.5rem', cursor: 'pointer', alignItems: 'center' }} className="hover:bg-white/5 transition-colors">
                                   <div style={{ flex: 2.2, display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: '600', color: 'var(--text-primary)', fontSize: '0.95rem' }}>
                                      {isExpanded ? <ChevronDown size={18} color={themeColor} /> : <ChevronRight size={18} color="var(--text-secondary)" />}
-                                     <span title={prov.name} style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '140px' }}>{prov.name}</span>
+                                     <span title={prov.name} style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: maximizedPanel === 'drillLoc' ? 'none' : '140px' }}>{prov.name}</span>
                                   </div>
                                   <div style={{ flex: 0.8, textAlign: 'right', fontWeight: 'bold', fontSize: '0.9rem' }}><span title={prov.actual.toLocaleString()}>{formatAmt(prov.actual)}</span></div>
                                   <div style={{ flex: 0.8, textAlign: 'right', fontWeight: 'bold', fontSize: '0.9rem', color: getPerfColor(prov.actual, prov.target) }}>{pct.toFixed(0)}%</div>
@@ -813,7 +814,7 @@ const Dashboard = () => {
                                          <div key={oidx} style={{ display: 'flex', gap: '0.5rem', padding: '0.5rem 0.5rem 0.5rem 2.5rem', fontSize: '0.85rem', alignItems: 'center', borderBottom: oidx !== prov.offices.length - 1 ? '1px solid var(--line-color-faint)' : 'none' }}>
                                             <div style={{ flex: 2.2, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center' }}>
                                               <span style={{ display: 'inline-block', width: '4px', height: '4px', borderRadius: '50%', background: 'var(--text-secondary)', marginRight: '0.5rem' }}></span>
-                                              <span title={office.name} style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '120px' }}>{office.name}</span>
+                                              <span title={office.name} style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: maximizedPanel === 'drillLoc' ? 'none' : '120px' }}>{office.name}</span>
                                             </div>
                                             <div style={{ flex: 0.8, textAlign: 'right', color: 'var(--text-secondary)' }}>{formatFullAmt(office.actual)}</div>
                                             <div style={{ flex: 0.8, textAlign: 'right', color: getPerfColor(office.actual, office.target) }}>{officePct.toFixed(0)}%</div>
