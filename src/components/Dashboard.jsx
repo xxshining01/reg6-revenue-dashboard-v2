@@ -334,7 +334,13 @@ const Dashboard = () => {
   }, [selectedProvince, rawData]);
 
   const processed = useMemo(() => {
-    if (!rawData.length || !selectedYear) return null;
+        if (!rawData.length || !selectedYear) return { 
+      totals: {actual: 0, target: 0, prev: 0}, 
+      monthlyData: [], 
+      hierarchicalData: [], 
+      hierarchicalLocationData: [], 
+      provinceAgg: {} 
+    };
 
     let filtered = rawData.filter(r => r.year === selectedYear);
     const targetProvincesTh = Object.values(PROVINCE_MAP_EN_TH);
@@ -425,8 +431,9 @@ const Dashboard = () => {
   const themeColor = isIncome ? '#2dd4bf' : '#fb7185';
   
   
-  const generateAIInsight = () => {
-    if (!processed || !processed.totals) return 'กำลังวิเคราะห์ข้อมูล...';
+    const generateAIInsight = () => {
+    if (loading) return 'กำลังโหลดและวิเคราะห์ข้อมูล...';
+    if (!processed || !processed.totals) return 'ยังไม่มีข้อมูลสำหรับการวิเคราะห์';
     const pct = processed.totals.target > 0 ? (processed.totals.actual / processed.totals.target) * 100 : 0;
     
     const typeStr = isIncome ? "รายได้" : "ค่าใช้จ่าย";
@@ -435,19 +442,21 @@ const Dashboard = () => {
       : (pct <= 100 ? "สามารถควบคุมได้ดีเยี่ยม" : (pct <= 110 ? "เริ่มสูงกว่าเป้าหมาย ต้องเฝ้าระวัง" : "เกินเป้าหมายที่ตั้งไว้ค่อนข้างมาก ให้ตรวจสอบเพื่อคุมรายจ่ายด่วน"));
       
     let topProv = "ไม่มีข้อมูล";
-    const provs = Object.values(processed.provinceAgg).filter(p => p.target > 0);
-    if (provs.length > 0) {
-      if (isIncome) provs.sort((a,b) => (b.actual/b.target) - (a.actual/a.target));
-      else provs.sort((a,b) => (a.actual/a.target) - (b.actual/b.target));
-      topProv = provs[0].name;
+    if (processed.provinceAgg) {
+      const provs = Object.values(processed.provinceAgg).filter(p => p.target > 0);
+      if (provs.length > 0) {
+        if (isIncome) provs.sort((a,b) => (b.actual/b.target) - (a.actual/a.target));
+        else provs.sort((a,b) => (a.actual/a.target) - (b.actual/b.target));
+        topProv = provs[0].name;
+      }
     }
 
     let topBG = "ไม่มีข้อมูล";
-    if (processed.hierarchicalData.length > 0) {
+    if (processed.hierarchicalData && processed.hierarchicalData.length > 0) {
       topBG = processed.hierarchicalData[0].name;
     }
 
-    const actStr = `฿${(processed.totals.actual / 1000000).toFixed(1)}M`;
+    const actStr = `${(processed.totals.actual / 1000000).toFixed(1)}M`;
     return `ในภาพรวม ${typeStr}สะสมอยู่ที่ ${actStr} คิดเป็น ${pct.toFixed(1)}% ของเป้าหมาย ถือว่า${statusStr} โดยมีกลุ่มธุรกิจหลักที่ขับเคลื่อนคือ "${topBG}" และจังหวัดที่มีประสิทธิภาพเมื่อเปรียบเทียบกับเป้าหมายได้ดีที่สุดคือ "จังหวัด${topProv}"`;
   };
 
@@ -472,7 +481,7 @@ const Dashboard = () => {
     else if (isWarning) fillColor = '#facc15';
     else fillColor = '#ef4444';
 
-    const isTargetProv = selectedProvince === 'ทั้งหมด' || selectedProvince === thName;
+    const isTargetProv = selectedProvince.length === 0 || selectedProvince.includes(thName);
     return { fillColor, weight: 1, opacity: 1, color: theme === 'light' ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.2)', fillOpacity: isTargetProv ? 0.8 : 0.2 };
   };
 
