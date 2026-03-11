@@ -433,8 +433,8 @@ const Dashboard = () => {
              
              {/* Totals Block */}
             <div style={{ 
-              background: `linear-gradient(180deg, ${isIncome ? 'rgba(13,148,136,0.15)' : 'rgba(225,29,72,0.15)'} 0%, rgba(9,9,11,0.5) 100%)`,
-              border: '1px solid var(--glass-border)', borderRadius: '20px', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem', boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.37)'
+              background: `linear-gradient(180deg, ${isIncome ? 'rgba(13,148,136,0.15)' : 'rgba(225,29,72,0.15)'} 0%, ${theme === 'dark' ? 'rgba(9,9,11,0.5)' : 'rgba(255,255,255,0.4)'} 100%)`,
+              border: '1px solid var(--glass-border)', borderRadius: '20px', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem', boxShadow: 'var(--glass-shadow)'
             }}>
               <div>
                 <h2 style={{ fontSize: '1.5rem', fontWeight: '700', color: themeColor, marginBottom: '0.25rem' }}>ภาพรวม{isIncome ? 'รายได้' : 'ค่าใช้จ่าย'}</h2>
@@ -644,7 +644,7 @@ const Dashboard = () => {
       <style>{`
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
         @keyframes pulse { 0% { opacity: 0.5; } 50% { opacity: 1; } 100% { opacity: 0.5; } }
-        .filter-select { background: var(--line-color); padding: 0.35rem 0.5rem; border-radius: 8px; color: #fff; border: 1px solid var(--line-color); outline: none; font-family: Outfit; font-weight: 500;}
+        .filter-select { background: var(--select-bg); padding: 0.35rem 0.5rem; border-radius: 8px; color: var(--text-primary); border: 1px solid var(--glass-border); outline: none; font-family: Outfit; font-weight: 500;}
         .hover\\:bg-white\\/5:hover { background-color: var(--line-color-subtle); }
         .transition-colors { transition-property: color, background-color, border-color; transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1); transition-duration: 150ms; }
       `}</style>
