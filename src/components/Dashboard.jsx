@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import Papa from 'papaparse';
 import { 
   BarChart, Bar, AreaChart, Area, PieChart, Pie, Cell, 
   XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend, ComposedChart, Line
 } from 'recharts';
-import { Activity, DollarSign, TrendingUp, TrendingDown, RefreshCw, AlertCircle, Filter, Target, MapPin, Layers, ChevronRight, ChevronDown, Sparkles, Sun, Moon } from 'lucide-react';
+import { Activity, DollarSign, TrendingUp, TrendingDown, RefreshCw, AlertCircle, Filter, Target, MapPin, Layers, ChevronRight, ChevronDown, Sparkles, Sun, Moon, Download } from 'lucide-react';
+import html2canvas from 'html2canvas';
 import { MapContainer, TileLayer, GeoJSON } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 
@@ -74,6 +75,27 @@ const GaugeChart = ({ title, actual, target, isIncome, theme }) => {
 };
 
 const Dashboard = () => {
+  const dashboardRef = useRef(null);
+
+  const exportAsImage = async () => {
+    if (!dashboardRef.current) return;
+    try {
+      const canvas = await html2canvas(dashboardRef.current, {
+        scale: 2, // High resolution
+        useCORS: true,
+        backgroundColor: theme === 'dark' ? '#09090b' : '#f8fafc',
+      });
+      const image = canvas.toDataURL("image/png", 1.0);
+      const link = document.createElement("a");
+      link.download = `dashboard-export-${selectedYear}-${selectedMonth}.png`;
+      link.href = image;
+      link.click();
+    } catch (err) {
+      console.error("Error exporting image:", err);
+      alert("เกิดข้อผิดพลาดในการบันทึกภาพหน้าจอ");
+    }
+  };
+
   const [rawData, setRawData] = useState([]);
   const [geoData, setGeoData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -345,7 +367,7 @@ const Dashboard = () => {
   );
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', gap: '1rem', paddingBottom: '3rem' }}>
+    <div ref={dashboardRef} style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', gap: '1rem', paddingBottom: '3rem' }}>
       
       {/* App Header w/ Tabs */}
       <div className="glass-panel" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem 1.5rem', borderRadius: '16px' }}>
@@ -384,6 +406,18 @@ const Dashboard = () => {
             title={theme === 'dark' ? 'เปิดโหมดสว่าง' : 'เปิดโหมดมืด'}
           >
             {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
+          </button>
+          <button 
+            onClick={exportAsImage}
+            style={{ 
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              width: '42px', height: '42px', borderRadius: '12px', border: '1px solid var(--glass-border)',
+              background: 'var(--bg-panel-tertiary)', color: 'var(--text-primary)', cursor: 'pointer',
+              transition: 'all 0.3s'
+            }}
+            title="บันทึกภาพหน้าจอ"
+          >
+            <Download size={20} />
           </button>
         </div>
       </div>
