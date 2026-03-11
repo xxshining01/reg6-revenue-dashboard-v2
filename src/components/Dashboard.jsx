@@ -351,24 +351,39 @@ const Dashboard = () => {
       <div className="glass-panel" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem 1.5rem', borderRadius: '16px' }}>
         <h1 style={{ fontWeight: '700', fontSize: '1.5rem', margin: 0, color: 'var(--text-primary)' }}>ระบบรายงานผลประกอบการ (8 จังหวัดภาคเหนือตอนล่าง)</h1>
         
-        <div style={{ display: 'flex', background: 'var(--bg-panel-tertiary)', borderRadius: '12px', padding: '0.25rem' }}>
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <div style={{ display: 'flex', background: 'var(--bg-panel-tertiary)', borderRadius: '12px', padding: '0.25rem' }}>
+            <button 
+              onClick={() => setActiveTab('income')} 
+              style={{ 
+                padding: '0.5rem 1.5rem', borderRadius: '8px', border: 'none', cursor: 'pointer', fontWeight: '600',
+                background: isIncome ? '#0d9488' : 'transparent', color: isIncome ? '#fff' : 'var(--text-secondary)', transition: 'all 0.3s'
+              }}
+            >
+              รายได้
+            </button>
+            <button 
+              onClick={() => setActiveTab('expense')} 
+              style={{ 
+                padding: '0.5rem 1.5rem', borderRadius: '8px', border: 'none', cursor: 'pointer', fontWeight: '600',
+                background: !isIncome ? '#e11d48' : 'transparent', color: !isIncome ? '#fff' : 'var(--text-secondary)', transition: 'all 0.3s'
+              }}
+            >
+              ค่าใช้จ่าย
+            </button>
+          </div>
+          
           <button 
-            onClick={() => setActiveTab('income')} 
+            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
             style={{ 
-              padding: '0.5rem 1.5rem', borderRadius: '8px', border: 'none', cursor: 'pointer', fontWeight: '600',
-              background: isIncome ? '#0d9488' : 'transparent', color: isIncome ? '#fff' : 'var(--text-secondary)', transition: 'all 0.3s'
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              width: '42px', height: '42px', borderRadius: '12px', border: '1px solid var(--glass-border)',
+              background: 'var(--bg-panel-tertiary)', color: 'var(--text-primary)', cursor: 'pointer',
+              transition: 'all 0.3s'
             }}
+            title={theme === 'dark' ? 'เปิดโหมดสว่าง' : 'เปิดโหมดมืด'}
           >
-            รายได้
-          </button>
-          <button 
-            onClick={() => setActiveTab('expense')} 
-            style={{ 
-              padding: '0.5rem 1.5rem', borderRadius: '8px', border: 'none', cursor: 'pointer', fontWeight: '600',
-              background: !isIncome ? '#e11d48' : 'transparent', color: !isIncome ? '#fff' : 'var(--text-secondary)', transition: 'all 0.3s'
-            }}
-          >
-            ค่าใช้จ่าย
+            {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
           </button>
         </div>
       </div>
@@ -442,7 +457,7 @@ const Dashboard = () => {
                 <h3 style={{ fontSize: '1rem', fontWeight: '600', marginBottom: '1rem', color: 'var(--text-primary)' }}>แผนที่ผลงานจังหวัด</h3>
                 <div style={{ flex: 1, borderRadius: '12px', overflow: 'hidden', background: 'var(--bg-panel)' }}>
                   <MapContainer center={[16.2, 99.8]} zoom={6.5} style={{ height: '100%', width: '100%' }} zoomControl={false} scrollWheelZoom={false}>
-                    <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png" />
+                    <TileLayer url={`https://{s}.basemaps.cartocdn.com/${theme === 'dark' ? 'dark_nolabels' : 'light_nolabels'}/{z}/{x}/{y}{r}.png`} />
                     {geoData && <GeoJSON key={activeTab + selectedYear + selectedMonth} data={geoData} style={getProvinceStyle} onEachFeature={onEachFeature} />}
                   </MapContainer>
                 </div>
@@ -457,15 +472,15 @@ const Dashboard = () => {
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <span style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>ปี พ.ศ.</span>
                 <select value={selectedYear} onChange={e => setSelectedYear(parseInt(e.target.value))} className="filter-select">
-                  {availableYears.map(y => <option key={y} value={y} >{y}</option>)}
+                  {availableYears.map(y => <option key={y} value={y}>{y}</option>)}
                 </select>
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <span style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>เดือน</span>
                 <select value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)} className="filter-select">
-                  <option value="ทั้งหมด" >ทุกเดือน</option>
-                  {MONTH_NAMES.map((m, i) => <option key={i} value={i+1} >{m}</option>)}
+                  <option value="ทั้งหมด">ทุกเดือน</option>
+                  {MONTH_NAMES.map((m, i) => <option key={i} value={i+1}>{m}</option>)}
                 </select>
               </div>
 
@@ -474,12 +489,12 @@ const Dashboard = () => {
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <span style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>พื้นที่</span>
                 <select value={selectedProvince} onChange={e => setSelectedProvince(e.target.value)} className="filter-select">
-                  <option value="ทั้งหมด" >ทุกจังหวัด (8 จังหวัด)</option>
-                  {availableProvinces.map(p => <option key={p} value={p} >{p}</option>)}
+                  <option value="ทั้งหมด">ทุกจังหวัด (8 จังหวัด)</option>
+                  {availableProvinces.map(p => <option key={p} value={p}>{p}</option>)}
                 </select>
                 <select value={selectedOffice} onChange={e => setSelectedOffice(e.target.value)} className="filter-select" style={{maxWidth: '180px'}}>
-                  <option value="ทั้งหมด" >ทุกที่ทำการ</option>
-                  {availableOffices.map(o => <option key={o} value={o} >{o}</option>)}
+                  <option value="ทั้งหมด">ทุกที่ทำการ</option>
+                  {availableOffices.map(o => <option key={o} value={o}>{o}</option>)}
                 </select>
               </div>
 
