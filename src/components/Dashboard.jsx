@@ -4,7 +4,7 @@ import {
   BarChart, Bar, AreaChart, Area, PieChart, Pie, Cell, 
   XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend, ComposedChart, Line
 } from 'recharts';
-import { Activity, DollarSign, TrendingUp, TrendingDown, RefreshCw, AlertCircle, Filter, Target, MapPin, Layers, ChevronRight, ChevronDown } from 'lucide-react';
+import { Activity, DollarSign, TrendingUp, TrendingDown, RefreshCw, AlertCircle, Filter, Target, MapPin, Layers, ChevronRight, ChevronDown, Sparkles } from 'lucide-react';
 import { MapContainer, TileLayer, GeoJSON } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 
@@ -247,6 +247,33 @@ const Dashboard = () => {
   const isIncome = activeTab === 'income';
   const themeColor = isIncome ? '#2dd4bf' : '#fb7185';
   
+  
+  const generateAIInsight = () => {
+    if (!processed || !processed.totals) return 'กำลังวิเคราะห์ข้อมูล...';
+    const pct = processed.totals.target > 0 ? (processed.totals.actual / processed.totals.target) * 100 : 0;
+    
+    const typeStr = isIncome ? "รายได้" : "ค่าใช้จ่าย";
+    const statusStr = isIncome 
+      ? (pct >= 100 ? "ทะลุเป้าหมายได้อย่างยอดเยี่ยม" : (pct >= 80 ? "อยู่ในเกณฑ์ที่ดีแต่ยังต้องผลักดันอีกเล็กน้อย" : "ยังต่ำกว่าเป้าหมายที่ควรจะเป็นพอสมควร")) 
+      : (pct <= 100 ? "สามารถควบคุมได้ดีเยี่ยม" : (pct <= 110 ? "เริ่มสูงกว่าเป้าหมาย ต้องเฝ้าระวัง" : "เกินเป้าหมายที่ตั้งไว้ค่อนข้างมาก ให้ตรวจสอบเพื่อคุมรายจ่ายด่วน"));
+      
+    let topProv = "ไม่มีข้อมูล";
+    const provs = Object.values(processed.provinceAgg).filter(p => p.target > 0);
+    if (provs.length > 0) {
+      if (isIncome) provs.sort((a,b) => (b.actual/b.target) - (a.actual/a.target));
+      else provs.sort((a,b) => (a.actual/a.target) - (b.actual/b.target));
+      topProv = provs[0].name;
+    }
+
+    let topBG = "ไม่มีข้อมูล";
+    if (processed.hierarchicalData.length > 0) {
+      topBG = processed.hierarchicalData[0].name;
+    }
+
+    const actStr = `฿${(processed.totals.actual / 1000000).toFixed(1)}M`;
+    return `ในภาพรวม ${typeStr}สะสมอยู่ที่ ${actStr} คิดเป็น ${pct.toFixed(1)}% ของเป้าหมาย ถือว่า${statusStr} โดยมีกลุ่มธุรกิจหลักที่ขับเคลื่อนคือ "${topBG}" และจังหวัดที่มีประสิทธิภาพเมื่อเปรียบเทียบกับเป้าหมายได้ดีที่สุดคือ "จังหวัด${topProv}"`;
+  };
+
   // Toggle expansion blocks
   const toggleBG = (bgName) => setExpandedBGs(prev => ({ ...prev, [bgName]: !prev[bgName] }));
   const toggleProv = (provName) => setExpandedProvs(prev => ({ ...prev, [provName]: !prev[provName] }));
@@ -351,8 +378,35 @@ const Dashboard = () => {
         <div className="flex-center" style={{ height: '50vh', width: '100%' }}>
            <div className="text-gradient" style={{ fontSize: '2rem', fontWeight: 'bold', animation: 'pulse 1.5s infinite' }}>กำลังโหลดข้อมูล...</div>
         </div>
+      
       ) : processed && (
-        <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          
+          {/* AI Daily Insights */}
+          <div className="glass-panel" style={{ 
+            background: 'linear-gradient(90deg, rgba(59, 130, 246, 0.15) 0%, rgba(139, 92, 246, 0.15) 100%)', 
+            border: '1px solid rgba(139, 92, 246, 0.3)', 
+            padding: '1.25rem 1.5rem', 
+            borderRadius: '16px',
+            display: 'flex', 
+            gap: '1.25rem', 
+            alignItems: 'center' 
+          }}>
+            <div style={{ background: 'rgba(139, 92, 246, 0.25)', padding: '0.8rem', borderRadius: '12px', color: '#c4b5fd', flexShrink: 0 }}>
+               <Sparkles size={28} />
+            </div>
+            <div style={{ flex: 1 }}>
+               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem' }}>
+                  <h3 style={{ fontSize: '1.15rem', fontWeight: '700', color: '#f8fafc', margin: 0 }}>AI Daily Insights</h3>
+                  <span style={{ fontSize: '0.75rem', background: 'rgba(255,255,255,0.15)', color: '#e2e8f0', padding: '2px 8px', borderRadius: '12px', fontWeight: '500' }}>บทวิเคราะห์โดย AI (Algorithm Coding)</span>
+               </div>
+               <p style={{ margin: 0, color: '#f1f5f9', lineHeight: '1.6', fontSize: '0.95rem' }}>
+                 {generateAIInsight()}
+               </p>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
           
           {/* LEFT SIDEBAR (Fixed Width) */}
           <div style={{ flex: '0 0 320px', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
@@ -563,6 +617,7 @@ const Dashboard = () => {
             </div>
 
           </div>
+        </div>
         </div>
       )}
 
