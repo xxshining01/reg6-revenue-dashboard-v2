@@ -77,22 +77,59 @@ const GaugeChart = ({ title, actual, target, isIncome, theme }) => {
 const Dashboard = () => {
   const dashboardRef = useRef(null);
 
-  const exportAsImage = async () => {
+  const captureAndDownload = async (filename) => {
     if (!dashboardRef.current) return;
     try {
       const canvas = await html2canvas(dashboardRef.current, {
-        scale: 2, // High resolution
+        scale: 2,
         useCORS: true,
         backgroundColor: theme === 'dark' ? '#09090b' : '#f8fafc',
       });
       const image = canvas.toDataURL("image/png", 1.0);
       const link = document.createElement("a");
-      link.download = `dashboard-export-${selectedYear}-${selectedMonth}.png`;
+      link.download = filename;
       link.href = image;
       link.click();
     } catch (err) {
       console.error("Error exporting image:", err);
-      alert("เกิดข้อผิดพลาดในการบันทึกภาพหน้าจอ");
+    }
+  };
+
+  const handleConfirmExport = async () => {
+    try {
+      if (exportMode === 'basic') {
+         setIsExportModalOpen(false);
+         setIsExporting(true);
+         setExportProgress({ current: 1, total: 1 });
+         await delay(800);
+         await captureAndDownload(`dashboard-export-${selectedYear}-month${selectedMonth}.png`);
+      } else if (exportMode === 'advanced') {
+         if (selectedExportProvinces.length === 0) {
+           alert("กรุณาเลือกอย่างน้อย 1 จังหวัด");
+           return;
+         }
+         setIsExportModalOpen(false);
+         setIsExporting(true);
+         
+         const originalProv = selectedProvince;
+         
+         for (let i = 0; i < selectedExportProvinces.length; i++) {
+            const prov = selectedExportProvinces[i];
+            setExportProgress({ current: i + 1, total: selectedExportProvinces.length });
+            
+            setSelectedProvince(prov);
+            await delay(2500); 
+            
+            await captureAndDownload(`dashboard-${prov}-${selectedYear}-month${selectedMonth}.png`);
+         }
+         
+         setSelectedProvince(originalProv);
+      }
+    } catch (err) {
+      console.error("Export Error:", err);
+      alert("เกิดข้อผิดพลาดในการแคปหน้าจอ");
+    } finally {
+      setIsExporting(false);
     }
   };
 
@@ -684,7 +721,7 @@ const Dashboard = () => {
 
             {/* Export Modal */}
       {isExportModalOpen && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div data-html2canvas-ignore="true" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div className="glass-panel" style={{ width: '450px', maxWidth: '90vw', background: theme === 'dark' ? '#18181b' : '#ffffff', color: 'var(--text-primary)', border: '1px solid var(--glass-border)' }}>
             <h2 style={{ fontSize: '1.25rem', fontWeight: '700', marginBottom: '1rem' }}>ตัวเลือกการบันทึกภาพหน้าจอ</h2>
             
@@ -748,7 +785,7 @@ const Dashboard = () => {
 
       {/* Export Loading Overlay */}
       {isExporting && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(8px)', zIndex: 10000, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
+        <div data-html2canvas-ignore="true" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(8px)', zIndex: 10000, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
            <RefreshCw size={48} style={{ animation: 'spin 1.5s linear infinite', marginBottom: '1.5rem', color: themeColor }} />
            <h2 style={{ fontSize: '1.5rem', fontWeight: '700', marginBottom: '0.5rem' }}>กำลังบันทึกภาพหน้าจอ...</h2>
            {exportMode === 'advanced' && (
