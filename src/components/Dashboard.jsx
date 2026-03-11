@@ -4,7 +4,7 @@ import {
   BarChart, Bar, AreaChart, Area, PieChart, Pie, Cell, 
   XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend, ComposedChart, Line
 } from 'recharts';
-import { Activity, DollarSign, TrendingUp, TrendingDown, RefreshCw, AlertCircle, Filter, Target, MapPin, Layers, ChevronRight, ChevronDown, Sparkles, Sun, Moon, Download, Camera } from 'lucide-react';
+import { Activity, DollarSign, TrendingUp, TrendingDown, RefreshCw, AlertCircle, Filter, Target, MapPin, Layers, ChevronRight, ChevronDown, Sparkles, Sun, Moon, Download, Camera, Maximize2, Minimize2 } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import { MapContainer, TileLayer, GeoJSON } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -18,6 +18,59 @@ const PROVINCE_MAP_EN_TH = {
   'Nakhon Sawan': 'นครสวรรค์',  'Uthai Thani': 'อุทัยธานี', 'Kamphaeng Phet': 'กำแพงเพชร',
   'Tak': 'ตาก', 'Sukhothai': 'สุโขทัย', 'Phitsanulok': 'พิษณุโลก',
   'Phichit': 'พิจิตร', 'Phetchabun': 'เพชรบูรณ์'
+};
+
+
+const MultiSelect = ({ options, selected, onChange, placeholder, disabled, style }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    const handleClickOutside = (e) => { if (ref.current && !ref.current.contains(e.target)) setIsOpen(false); };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const handleToggle = (opt) => {
+    if (opt === 'ทั้งหมด') {
+       if (selected.length === 0) return; // already all
+       onChange([]);
+       return;
+    }
+    let newSel = [...selected];
+    if (newSel.includes(opt)) newSel = newSel.filter(x => x !== opt);
+    else newSel.push(opt);
+    onChange(newSel);
+  };
+
+  const displayTxt = selected.length === 0 ? 'ทั้งหมด' : (selected.length === 1 ? selected[0] : `เลือก ${selected.length} รายการ`);
+
+  return (
+    <div ref={ref} style={{ position: 'relative', minWidth: '150px', ...style }}>
+      <div 
+        onClick={() => !disabled && setIsOpen(!isOpen)}
+        className="filter-select"
+        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.6 : 1 }}
+      >
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '120px' }}>{displayTxt}</span>
+        <ChevronDown size={14} style={{ flexShrink: 0 }} />
+      </div>
+      {isOpen && !disabled && (
+        <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, marginTop: '4px', background: 'var(--bg-panel)', border: '1px solid var(--glass-border)', borderRadius: '8px', zIndex: 100, maxHeight: '250px', overflowY: 'auto', boxShadow: 'var(--glass-shadow)', padding: '0.5rem' }}>
+           <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.4rem', cursor: 'pointer', borderRadius: '4px' }} className="hover:bg-white/5">
+              <input type="checkbox" checked={selected.length === 0} onChange={() => handleToggle('ทั้งหมด')} style={{ accentColor: '#10b981' }} />
+              <span style={{ fontSize: '0.85rem' }}>ทั้งหมด</span>
+           </label>
+           <div style={{ height: '1px', background: 'var(--var-line-color)', margin: '4px 0' }} />
+           {options.map(opt => (
+             <label key={opt.value} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.4rem', cursor: 'pointer', borderRadius: '4px' }} className="hover:bg-white/5">
+                <input type="checkbox" checked={selected.includes(opt.value)} onChange={() => handleToggle(opt.value)} style={{ accentColor: '#10b981' }} />
+                <span style={{ fontSize: '0.85rem', color: 'var(--text-primary)' }}>{opt.label}</span>
+             </label>
+           ))}
+        </div>
+      )}
+    </div>
+  );
 };
 
 const GaugeChart = ({ title, actual, target, isIncome, theme }) => {
@@ -68,7 +121,47 @@ const GaugeChart = ({ title, actual, target, isIncome, theme }) => {
         </div>
       </div>
       <div style={{ marginTop: '1rem', fontSize: '0.8rem', color: 'var(--text-secondary)', textAlign: 'center' }}>
-        เป้าหมาย: ฿{target.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+        เป้าหมาย: {target.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+      </div>
+    </div>
+  );
+};
+
+
+const BusinessGroupDoughnut = ({ data, maximizedPanel, setMaximizedPanel }) => {
+  const chartData = data?.map(bg => ({ name: bg.name, value: bg.actual })).filter(d => d.value > 0) || [];
+  const COLORS = ['#0d9488', '#ec4899', '#f59e0b', '#3b82f6', '#ef4444', '#84cc16', '#8b5cf6', '#a855f7', '#14b8a6'];
+  if (chartData.length === 0) return null;
+  
+  return (
+    <div className="glass-panel" style={maximizedPanel === 'donut' ? { position: 'fixed', top: '2rem', left: '2rem', right: '2rem', bottom: '2rem', zIndex: 9999, display: 'flex', flexDirection: 'column', padding: '2rem' } : { padding: '1.25rem', display: 'flex', flexDirection: 'column', height: '350px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+         <h3 style={{ fontSize: maximizedPanel === 'donut' ? '1.5rem' : '1rem', fontWeight: '600', color: 'var(--text-primary)', margin: 0 }}>สัดส่วนตามกลุ่มธุรกิจ</h3>
+         <button onClick={() => setMaximizedPanel(maximizedPanel === 'donut' ? null : 'donut')} style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}>{maximizedPanel === 'donut' ? <Minimize2 size={24}/> : <Maximize2 size={18}/>}</button>
+      </div>
+      <div style={{ flex: 1, minHeight: 0 }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart>
+            <Pie
+              data={chartData}
+              cx="50%"
+              cy="50%"
+              innerRadius={50}
+              outerRadius={85}
+              paddingAngle={3}
+              dataKey="value"
+              stroke="none"
+              isAnimationActive={true}
+            >
+              {chartData.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
+            </Pie>
+            <RechartsTooltip 
+              formatter={(value) => [value.toLocaleString(undefined, { maximumFractionDigits: 0 }), 'ผลงาน']}
+              contentStyle={{ background: 'var(--bg-panel-secondary)', border: '1px solid var(--glass-border)', borderRadius: '8px', color: 'var(--text-primary)' }}
+            />
+            <Legend verticalAlign="bottom" wrapperStyle={{ fontSize: '0.75rem', color: 'var(--text-secondary)', paddingTop: '10px' }} />
+          </PieChart>
+        </ResponsiveContainer>
       </div>
     </div>
   );
@@ -137,6 +230,7 @@ const Dashboard = () => {
   const [geoData, setGeoData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [maximizedPanel, setMaximizedPanel] = useState(null);
 
   // Filters & State
   const [activeTab, setActiveTab] = useState('income');
@@ -154,11 +248,15 @@ const Dashboard = () => {
   }, [theme]);
   const [selectedYear, setSelectedYear] = useState('');
   const [availableYears, setAvailableYears] = useState([]);
-  const [selectedMonth, setSelectedMonth] = useState('ทั้งหมด');
+  const [selectedMonth, setSelectedMonth] = useState([]);
+  const [selectedBG, setSelectedBG] = useState([]);
+  const [availableBGs, setAvailableBGs] = useState([]);
+  const [selectedEVM, setSelectedEVM] = useState([]);
+  const [availableEVMs, setAvailableEVMs] = useState([]);
   
-  const [selectedProvince, setSelectedProvince] = useState('ทั้งหมด');
+  const [selectedProvince, setSelectedProvince] = useState([]);
   const [availableProvinces, setAvailableProvinces] = useState([]);
-  const [selectedOffice, setSelectedOffice] = useState('ทั้งหมด');
+  const [selectedOffice, setSelectedOffice] = useState([]);
   const [availableOffices, setAvailableOffices] = useState([]);
   
   // Drill-down States
@@ -192,7 +290,11 @@ const Dashboard = () => {
           province: row['จังหวัด'],
           office: row['ที่ทำการ'],
           category: row['หมวดหมู่'],
-          businessGroup: row['Business Group'],
+          businessGroup: (() => { 
+          let bgRaw = row['Business Group'] || 'อื่นๆ';
+          bgRaw = bgRaw.replace(/รายได้กลุ่มบริการ/g, '').replace(/รายได้กลุ่มธุรกิจ/g, '').replace(/ใช้จ่าย/g, '').trim();
+          if(!bgRaw) bgRaw = 'อื่นๆ';
+ return bgRaw; })(),
           evmService: row['EVM Service'],
           actual: cleanNumber(row['ผลงานปีนี้']),
           target: cleanNumber(row['เป้าหมาย']),
@@ -207,6 +309,8 @@ const Dashboard = () => {
         const targetProvincesTh = Object.values(PROVINCE_MAP_EN_TH);
         const provinces = [...new Set(parsed.map(r => r.province))].filter(p => targetProvincesTh.includes(p)).sort();
         setAvailableProvinces(provinces);
+        setAvailableBGs([...new Set(parsed.map(r => r.businessGroup))].sort());
+        setAvailableEVMs([...new Set(parsed.map(r => r.evmService))].sort());
 
         setLoading(false);
       },
@@ -218,15 +322,15 @@ const Dashboard = () => {
 
   useEffect(() => {
     if (!rawData.length) return;
-    if (selectedProvince === 'ทั้งหมด') {
+    if (selectedProvince.length === 0) {
       const targetProvincesTh = Object.values(PROVINCE_MAP_EN_TH);
       const offices = [...new Set(rawData.filter(r => targetProvincesTh.includes(r.province)).map(r => r.office))].filter(Boolean).sort();
       setAvailableOffices(offices);
     } else {
-      const offices = [...new Set(rawData.filter(r => r.province === selectedProvince).map(r => r.office))].filter(Boolean).sort();
+      const offices = [...new Set(rawData.filter(r => selectedProvince.includes(r.province)).map(r => r.office))].filter(Boolean).sort();
       setAvailableOffices(offices);
     }
-    setSelectedOffice('ทั้งหมด'); 
+    setSelectedOffice([]); 
   }, [selectedProvince, rawData]);
 
   const processed = useMemo(() => {
@@ -236,9 +340,11 @@ const Dashboard = () => {
     const targetProvincesTh = Object.values(PROVINCE_MAP_EN_TH);
     filtered = filtered.filter(r => targetProvincesTh.includes(r.province));
 
-    if (selectedMonth !== 'ทั้งหมด') filtered = filtered.filter(r => r.month === parseInt(selectedMonth));
-    if (selectedProvince !== 'ทั้งหมด') filtered = filtered.filter(r => r.province === selectedProvince);
-    if (selectedOffice !== 'ทั้งหมด') filtered = filtered.filter(r => r.office === selectedOffice);
+    if (selectedMonth.length > 0) filtered = filtered.filter(r => selectedMonth.includes(r.month));
+    if (selectedBG.length > 0) filtered = filtered.filter(r => selectedBG.includes(r.businessGroup));
+    if (selectedEVM.length > 0) filtered = filtered.filter(r => selectedEVM.includes(r.evmService));
+    if (selectedProvince.length > 0) filtered = filtered.filter(r => selectedProvince.includes(r.province));
+    if (selectedOffice.length > 0) filtered = filtered.filter(r => selectedOffice.includes(r.office));
 
     const targetCategory = activeTab === 'income' ? 'รายได้' : 'ค่าใช้จ่าย';
     const tabFiltered = filtered.filter(r => r.category === targetCategory);
@@ -310,10 +416,10 @@ const Dashboard = () => {
       provinceAgg: locationMap
     };
 
-  }, [rawData, selectedYear, selectedMonth, selectedProvince, selectedOffice, activeTab]);
+  }, [rawData, selectedYear, selectedMonth, selectedProvince, selectedOffice, activeTab, selectedBG, selectedEVM]);
 
-  const formatAmt = (val) => `฿${(val/1000000).toFixed(1)}M`;
-  const formatFullAmt = (val) => `฿${val.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+  const formatAmt = (val) => `${(val/1000000).toFixed(1)}M`;
+  const formatFullAmt = (val) => `${val.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
 
   const isIncome = activeTab === 'income';
   const themeColor = isIncome ? '#2dd4bf' : '#fb7185';
@@ -528,7 +634,7 @@ const Dashboard = () => {
 
               <div style={{ background: `rgba(${isIncome ? '45,212,191' : '244,63,94'},0.15)`, padding: '1.25rem', borderRadius: '16px', border: `1px solid ${themeColor}40` }}>
                 <div style={{ color: themeColor, fontSize: '0.875rem', marginBottom: '0.25rem', fontWeight: '500' }}>รวมยอดสะสม</div>
-                <div style={{ fontSize: '2.5rem', fontWeight: '700', color: 'var(--text-primary)' }}>{formatAmt(processed.totals.actual)}</div>
+                <div style={{ fontSize: '2.5rem', fontWeight: '700', color: 'var(--text-primary)' }}><span title={processed.totals.actual.toLocaleString()}>{formatAmt(processed.totals.actual)}</span></div>
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1rem' }}>
@@ -538,8 +644,11 @@ const Dashboard = () => {
             </div>
 
              {/* Top Provinces Map */}
-             <div className="glass-panel" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', height: '400px' }}>
-                <h3 style={{ fontSize: '1rem', fontWeight: '600', marginBottom: '1rem', color: 'var(--text-primary)' }}>แผนที่ผลงานจังหวัด</h3>
+             <div className="glass-panel" style={maximizedPanel === 'map' ? { position: 'fixed', top: '2rem', left: '2rem', right: '2rem', bottom: '2rem', zIndex: 9999, display: 'flex', flexDirection: 'column', padding: '2rem' } : { padding: '1rem', display: 'flex', flexDirection: 'column', height: '400px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                  <h3 style={{ fontSize: maximizedPanel === 'map' ? '1.5rem' : '1rem', fontWeight: '600', color: 'var(--text-primary)', margin: 0 }}>แผนที่ผลงานจังหวัด</h3>
+                  <button onClick={() => setMaximizedPanel(maximizedPanel === 'map' ? null : 'map')} style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}>{maximizedPanel === 'map' ? <Minimize2 size={24}/> : <Maximize2 size={18}/>}</button>
+                </div>
                 <div style={{ flex: 1, borderRadius: '12px', overflow: 'hidden', background: 'var(--bg-panel)' }}>
                   <MapContainer center={[16.2, 99.8]} zoom={6.5} style={{ height: '100%', width: '100%' }} zoomControl={false} scrollWheelZoom={false}>
                     <TileLayer url={`https://{s}.basemaps.cartocdn.com/${theme === 'dark' ? 'dark_nolabels' : 'light_nolabels'}/{z}/{x}/{y}{r}.png`} />
@@ -547,7 +656,15 @@ const Dashboard = () => {
                   </MapContainer>
                 </div>
              </div>
+             
+             {/* Business Group Doughnut */}
+             <BusinessGroupDoughnut data={processed?.hierarchicalData} maximizedPanel={maximizedPanel} setMaximizedPanel={setMaximizedPanel} />
           </div>
+
+                {/* Maximize Overlay Backdrop */}
+      {maximizedPanel && (
+        <div style={{ fixed: 'position', top:0, left:0, right:0, bottom:0, position: 'fixed', background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', zIndex: 9990 }} onClick={() => setMaximizedPanel(null)} />
+      )}
 
           {/* MAIN CONTENT AREA */}
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '1rem', minWidth: '600px' }}>
@@ -563,24 +680,15 @@ const Dashboard = () => {
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <span style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>เดือน</span>
-                <select value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)} className="filter-select">
-                  <option value="ทั้งหมด">ทุกเดือน</option>
-                  {MONTH_NAMES.map((m, i) => <option key={i} value={i+1}>{m}</option>)}
-                </select>
+                <MultiSelect selected={selectedMonth} onChange={setSelectedMonth} options={MONTH_NAMES.map((m,i)=>({label:m, value:i+1}))} />
               </div>
 
               <div style={{ width: '1px', height: '20px', background: 'var(--line-color)' }}></div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <span style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>พื้นที่</span>
-                <select value={selectedProvince} onChange={e => setSelectedProvince(e.target.value)} className="filter-select">
-                  <option value="ทั้งหมด">ทุกจังหวัด (8 จังหวัด)</option>
-                  {availableProvinces.map(p => <option key={p} value={p}>{p}</option>)}
-                </select>
-                <select value={selectedOffice} onChange={e => setSelectedOffice(e.target.value)} className="filter-select" style={{maxWidth: '180px'}}>
-                  <option value="ทั้งหมด">ทุกที่ทำการ</option>
-                  {availableOffices.map(o => <option key={o} value={o}>{o}</option>)}
-                </select>
+                <MultiSelect selected={selectedProvince} onChange={setSelectedProvince} options={availableProvinces.map(p=>({label:p, value:p}))} />
+                <MultiSelect selected={selectedOffice} onChange={setSelectedOffice} options={availableOffices.map(o=>({label:o, value:o}))} disabled={selectedProvince.length !== 1} />
               </div>
 
               <button className="glass-button" onClick={fetchData} disabled={loading} style={{ marginLeft: 'auto', padding: '0.5rem 1rem' }}>
@@ -590,10 +698,11 @@ const Dashboard = () => {
             </div>
 
             {/* Monthly Trend Chart */}
-            <div className="glass-panel" style={{ padding: '1.25rem', height: '320px', display: 'flex', flexDirection: 'column' }}>
-                <h3 style={{ fontSize: '1rem', fontWeight: '600', marginBottom: '1rem', color: 'var(--text-primary)' }}>
-                  แนวโน้มผลงานรายเดือน (ม.ค. - ธ.ค.)
-                </h3>
+            <div className="glass-panel" style={maximizedPanel === 'trend' ? { position: 'fixed', top: '2rem', left: '2rem', right: '2rem', bottom: '2rem', zIndex: 9999, display: 'flex', flexDirection: 'column', padding: '2rem' } : { padding: '1.25rem', height: '320px', display: 'flex', flexDirection: 'column' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                  <h3 style={{ fontSize: maximizedPanel === 'trend' ? '1.5rem' : '1rem', fontWeight: '600', color: 'var(--text-primary)', margin: 0 }}>แนวโน้มผลงานรายเดือน (ม.ค. - ธ.ค.)</h3>
+                  <button onClick={() => setMaximizedPanel(maximizedPanel === 'trend' ? null : 'trend')} style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}>{maximizedPanel === 'trend' ? <Minimize2 size={24}/> : <Maximize2 size={18}/>}</button>
+                </div>
                 <div style={{ flex: 1, minHeight: 0 }}>
                   <ResponsiveContainer width="100%" height="100%">
                     <ComposedChart data={processed.monthlyData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
@@ -613,9 +722,10 @@ const Dashboard = () => {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                 
                 {/* Hierarchical Breakdown (Business Group -> EVM Service) */}
-                <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', flex: 1 }}>
+                <div className="glass-panel" style={maximizedPanel === 'drillBG' ? { position: 'fixed', top: '2rem', left: '2rem', right: '2rem', bottom: '2rem', zIndex: 9999, display: 'flex', flexDirection: 'column', padding: '2rem' } : { padding: '1.5rem', display: 'flex', flexDirection: 'column', flex: 1 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                       <h3 style={{ fontSize: '1.1rem', fontWeight: '600', color: themeColor }}>เจาะลึกกลุ่มธุรกิจ (Business Group)</h3>
+                       <h3 style={{ fontSize: maximizedPanel === 'drillBG' ? '1.5rem' : '1.1rem', fontWeight: '600', color: themeColor, margin: 0 }}>เจาะลึกกลุ่มธุรกิจ (Business Group)</h3>
+                       <button onClick={() => setMaximizedPanel(maximizedPanel === 'drillBG' ? null : 'drillBG')} style={{ background: 'transparent', border: 'none', color: themeColor, cursor: 'pointer' }}>{maximizedPanel === 'drillBG' ? <Minimize2 size={24}/> : <Maximize2 size={18}/>}</button>
                     </div>
 
                     <div style={{ display: 'flex', gap: '1rem', padding: '0.75rem 1rem', borderBottom: '1px solid var(--line-color)', fontWeight: '600', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
@@ -624,7 +734,7 @@ const Dashboard = () => {
                         <div style={{ flex: 1, textAlign: 'right' }}>% สำเร็จ</div>
                     </div>
 
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '0.5rem' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '0.5rem', overflowY: 'auto', flex: 1 }}>
                         {processed.hierarchicalData.map((bg, idx) => {
                            const isExpanded = !!expandedBGs[bg.name];
                            const pct = bg.target > 0 ? (bg.actual / bg.target) * 100 : 0;
@@ -636,7 +746,7 @@ const Dashboard = () => {
                                      {isExpanded ? <ChevronDown size={18} color={themeColor} /> : <ChevronRight size={18} color="var(--text-secondary)" />}
                                      <span title={bg.name} style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '180px' }}>{bg.name}</span>
                                   </div>
-                                  <div style={{ flex: 1, textAlign: 'right', fontWeight: 'bold' }}>{formatAmt(bg.actual)}</div>
+                                  <div style={{ flex: 1, textAlign: 'right', fontWeight: 'bold' }}><span title={bg.actual.toLocaleString()}>{formatAmt(bg.actual)}</span></div>
                                   <div style={{ flex: 1, textAlign: 'right', fontWeight: 'bold', color: getPerfColor(bg.actual, bg.target) }}>{pct.toFixed(0)}%</div>
                                </div>
 
@@ -676,7 +786,7 @@ const Dashboard = () => {
                         <div style={{ flex: 1, textAlign: 'right' }}>สัดส่วนรวม</div>
                     </div>
 
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '0.5rem' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '0.5rem', overflowY: 'auto', flex: 1 }}>
                         {processed.hierarchicalLocationData.map((prov, idx) => {
                            const isExpanded = !!expandedProvs[prov.name];
                            const pct = prov.target > 0 ? (prov.actual / prov.target) * 100 : 0;
@@ -689,7 +799,7 @@ const Dashboard = () => {
                                      {isExpanded ? <ChevronDown size={18} color={themeColor} /> : <ChevronRight size={18} color="var(--text-secondary)" />}
                                      <span title={prov.name} style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '140px' }}>{prov.name}</span>
                                   </div>
-                                  <div style={{ flex: 0.8, textAlign: 'right', fontWeight: 'bold', fontSize: '0.9rem' }}>{formatAmt(prov.actual)}</div>
+                                  <div style={{ flex: 0.8, textAlign: 'right', fontWeight: 'bold', fontSize: '0.9rem' }}><span title={prov.actual.toLocaleString()}>{formatAmt(prov.actual)}</span></div>
                                   <div style={{ flex: 0.8, textAlign: 'right', fontWeight: 'bold', fontSize: '0.9rem', color: getPerfColor(prov.actual, prov.target) }}>{pct.toFixed(0)}%</div>
                                   <MiniBar pct={provProp} />
                                </div>
