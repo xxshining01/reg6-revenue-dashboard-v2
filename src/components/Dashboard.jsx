@@ -104,6 +104,13 @@ const Dashboard = () => {
   // Filters & State
   const [activeTab, setActiveTab] = useState('income');
   const [theme, setTheme] = useState('dark');
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [exportMode, setExportMode] = useState('basic');
+  const [selectedExportProvinces, setSelectedExportProvinces] = useState([]);
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportProgress, setExportProgress] = useState({ current: 0, total: 0 });
+
+  const delay = (ms) => new Promise(res => setTimeout(res, ms));
 
   useEffect(() => {
     document.body.setAttribute('data-theme', theme);
@@ -408,7 +415,7 @@ const Dashboard = () => {
             {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
           </button>
           <button 
-            onClick={exportAsImage}
+            onClick={() => setIsExportModalOpen(true)}
             style={{ 
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               width: '42px', height: '42px', borderRadius: '12px', border: '1px solid var(--glass-border)',
@@ -675,7 +682,86 @@ const Dashboard = () => {
         </div>
       )}
 
+            {/* Export Modal */}
+      {isExportModalOpen && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div className="glass-panel" style={{ width: '450px', maxWidth: '90vw', background: theme === 'dark' ? '#18181b' : '#ffffff', color: 'var(--text-primary)', border: '1px solid var(--glass-border)' }}>
+            <h2 style={{ fontSize: '1.25rem', fontWeight: '700', marginBottom: '1rem' }}>ตัวเลือกการบันทึกภาพหน้าจอ</h2>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1.5rem' }}>
+               <label style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer', padding: '0.75rem', borderRadius: '8px', background: exportMode === 'basic' ? 'var(--bg-highlight-hover)' : 'transparent', border: '1px solid', borderColor: exportMode === 'basic' ? themeColor : 'var(--glass-border)' }}>
+                 <input type="radio" name="exportMode" value="basic" checked={exportMode === 'basic'} onChange={() => setExportMode('basic')} style={{ accentColor: themeColor, width: '18px', height: '18px' }} />
+                 <div>
+                   <div style={{ fontWeight: '600' }}>โหมดพื้นฐาน (Basic)</div>
+                   <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>แคปภาพหน้าจอในสถานะปัจจุบัน 1 ภาพ</div>
+                 </div>
+               </label>
+               
+               <label style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer', padding: '0.75rem', borderRadius: '8px', background: exportMode === 'advanced' ? 'var(--bg-highlight-hover)' : 'transparent', border: '1px solid', borderColor: exportMode === 'advanced' ? themeColor : 'var(--glass-border)' }}>
+                 <input type="radio" name="exportMode" value="advanced" checked={exportMode === 'advanced'} onChange={() => setExportMode('advanced')} style={{ accentColor: themeColor, width: '18px', height: '18px' }} />
+                 <div>
+                   <div style={{ fontWeight: '600' }}>โหมดขั้นสูง (Advanced Batch Export)</div>
+                   <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>แคปภาพแยกรายจังหวัดแบบอัตโนมัติ</div>
+                 </div>
+               </label>
+               
+               {exportMode === 'advanced' && (
+                 <div style={{ background: 'var(--bg-panel-secondary)', padding: '1rem', borderRadius: '8px', maxHeight: '200px', overflowY: 'auto' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                      <span style={{ fontWeight: '600', fontSize: '0.9rem' }}>เลือกจังหวัดที่ต้องการ:</span>
+                      <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <button onClick={() => setSelectedExportProvinces([...availableProvinces])} style={{ background: 'none', border: 'none', color: themeColor, fontSize: '0.8rem', cursor: 'pointer', textDecoration: 'underline' }}>เลือกทั้งหมด</button>
+                        <button onClick={() => setSelectedExportProvinces([])} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', fontSize: '0.8rem', cursor: 'pointer', textDecoration: 'underline' }}>ล้างค่า</button>
+                      </div>
+                    </div>
+                    
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+                      {availableProvinces.map(p => (
+                        <label key={p} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9rem', cursor: 'pointer', color: 'var(--text-primary)' }}>
+                          <input type="checkbox" checked={selectedExportProvinces.includes(p)} onChange={(e) => {
+                            if (e.target.checked) setSelectedExportProvinces(prev => [...prev, p]);
+                            else setSelectedExportProvinces(prev => prev.filter(x => x !== p));
+                          }} style={{ accentColor: themeColor }} />
+                          {p}
+                        </label>
+                      ))}
+                    </div>
+                 </div>
+               )}
+            </div>
+            
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+              <button 
+                onClick={() => setIsExportModalOpen(false)} 
+                style={{ padding: '0.6rem 1.25rem', borderRadius: '8px', border: '1px solid var(--glass-border)', background: 'transparent', color: 'var(--text-primary)', cursor: 'pointer', fontWeight: '500' }}>
+                ยกเลิก
+              </button>
+              <button 
+                onClick={handleConfirmExport} 
+                className="glass-button" style={{ background: themeColor, borderColor: themeColor, padding: '0.6rem 1.25rem', opacity: isExporting ? 0.7 : 1 }} disabled={isExporting}>
+                <Download size={16} /> เริ่มดาวน์โหลด
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Export Loading Overlay */}
+      {isExporting && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(8px)', zIndex: 10000, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
+           <RefreshCw size={48} style={{ animation: 'spin 1.5s linear infinite', marginBottom: '1.5rem', color: themeColor }} />
+           <h2 style={{ fontSize: '1.5rem', fontWeight: '700', marginBottom: '0.5rem' }}>กำลังบันทึกภาพหน้าจอ...</h2>
+           {exportMode === 'advanced' && (
+             <p style={{ fontSize: '1.1rem', color: '#a1a1aa' }}>
+               ภาพที่ {exportProgress.current} จากทั้งหมด {exportProgress.total} ภาพ
+             </p>
+           )}
+           <p style={{ fontSize: '0.9rem', color: '#ef4444', marginTop: '1rem' }}>*กรุณาอย่าสลับหน้าจอหรือปิดเบราว์เซอร์ระหว่างดำเนินการ</p>
+        </div>
+      )}
+
       <style>{`
+
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
         @keyframes pulse { 0% { opacity: 0.5; } 50% { opacity: 1; } 100% { opacity: 0.5; } }
         .filter-select { background: var(--select-bg); padding: 0.35rem 0.5rem; border-radius: 8px; color: var(--text-primary); border: 1px solid var(--glass-border); outline: none; font-family: Outfit; font-weight: 500;}
