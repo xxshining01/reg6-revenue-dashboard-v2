@@ -412,7 +412,7 @@ const Dashboard = () => {
 
   return (
     <>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '1rem 1.5rem 0', maxWidth: '100%', boxSizing: 'border-box' }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '1.5rem 1.75rem 0.75rem', maxWidth: '100%', boxSizing: 'border-box' }}>
          <button 
            onClick={() => setIsExportModalOpen(true)}
            style={{ 
