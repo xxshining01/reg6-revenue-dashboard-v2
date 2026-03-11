@@ -19,7 +19,7 @@ const PROVINCE_MAP_EN_TH = {
   'Phichit': 'พิจิตร', 'Phetchabun': 'เพชรบูรณ์'
 };
 
-const GaugeChart = ({ title, actual, target, isIncome }) => {
+const GaugeChart = ({ title, actual, target, isIncome, theme }) => {
   const pct = target > 0 ? (actual / target) * 100 : 0;
   
   let color = '#3b82f6';
@@ -324,7 +324,7 @@ const Dashboard = () => {
   };
 
   const getPerfColor = (actual, target) => {
-     if(target === 0) return '#fff';
+     if(target === 0) return 'var(--text-secondary)';
      const pct = (actual / target) * 100;
      const isGood = isIncome ? pct >= 100 : pct <= 100;
      const isWarn = isIncome ? (pct >= 80 && pct < 100) : (pct > 100 && pct <= 110);
@@ -412,15 +412,15 @@ const Dashboard = () => {
             gap: '1.25rem', 
             alignItems: 'center' 
           }}>
-            <div style={{ background: 'rgba(139, 92, 246, 0.25)', padding: '0.8rem', borderRadius: '12px', color: '#c4b5fd', flexShrink: 0 }}>
+            <div style={{ background: 'rgba(139, 92, 246, 0.25)', padding: '0.8rem', borderRadius: '12px', color: theme === 'dark' ? '#c4b5fd' : '#8b5cf6', flexShrink: 0 }}>
                <Sparkles size={28} />
             </div>
             <div style={{ flex: 1 }}>
                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem' }}>
-                  <h3 style={{ fontSize: '1.15rem', fontWeight: '700', color: '#f8fafc', margin: 0 }}>AI Daily Insights</h3>
-                  <span style={{ fontSize: '0.75rem', background: 'rgba(255,255,255,0.15)', color: '#e2e8f0', padding: '2px 8px', borderRadius: '12px', fontWeight: '500' }}>บทวิเคราะห์โดย AI (Algorithm Coding)</span>
+                  <h3 style={{ fontSize: '1.15rem', fontWeight: '700', color: 'var(--text-primary)', margin: 0 }}>AI Daily Insights</h3>
+                  <span style={{ fontSize: '0.75rem', background: 'rgba(255,255,255,0.15)', color: 'var(--text-secondary)', padding: '2px 8px', borderRadius: '12px', fontWeight: '500' }}>บทวิเคราะห์โดย AI (Algorithm Coding)</span>
                </div>
-               <p style={{ margin: 0, color: '#f1f5f9', lineHeight: '1.6', fontSize: '0.95rem' }}>
+               <p style={{ margin: 0, color: 'var(--text-primary)', lineHeight: '1.6', fontSize: '0.95rem' }}>
                  {generateAIInsight()}
                </p>
             </div>
@@ -447,8 +447,8 @@ const Dashboard = () => {
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1rem' }}>
-                  <GaugeChart title="เทียบเป้าหมายปีนี้" actual={processed.totals.actual} target={processed.totals.target} isIncome={isIncome} />
-                  <GaugeChart title="เทียบส่วนปีก่อนหน้า" actual={processed.totals.actual} target={processed.totals.prev} isIncome={isIncome} />
+                  <GaugeChart title="เทียบเป้าหมายปีนี้" actual={processed.totals.actual} target={processed.totals.target} isIncome={isIncome} theme={theme} />
+                  <GaugeChart title="เทียบส่วนปีก่อนหน้า" actual={processed.totals.actual} target={processed.totals.prev} isIncome={isIncome} theme={theme} />
               </div>
             </div>
 
@@ -512,9 +512,9 @@ const Dashboard = () => {
                 <div style={{ flex: 1, minHeight: 0 }}>
                   <ResponsiveContainer width="100%" height="100%">
                     <ComposedChart data={processed.monthlyData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
-                      <XAxis dataKey="name" stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)', fontSize: 11 }} axisLine={false} tickLine={false} />
-                      <YAxis stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)', fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={formatAmt} />
+                      <CartesianGrid strokeDasharray="3 3" stroke={theme === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'} vertical={false} />
+                      <XAxis dataKey="name" stroke={theme === 'dark' ? '#a1a1aa' : '#475569'} tick={{ fill: theme === 'dark' ? '#a1a1aa' : '#475569', fontSize: 11 }} axisLine={false} tickLine={false} />
+                      <YAxis stroke={theme === 'dark' ? '#a1a1aa' : '#475569'} tick={{ fill: theme === 'dark' ? '#a1a1aa' : '#475569', fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={formatAmt} />
                       <RechartsTooltip formatter={(v) => formatFullAmt(v)} contentStyle={{ backgroundColor: 'var(--tooltip-bg)', border: 'none', borderRadius: '8px' }} />
                       <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
                       <Bar dataKey="actual" name="ผลงาน" fill={themeColor} radius={[4, 4, 0, 0]} barSize={35} />
