@@ -1,12 +1,16 @@
-import './App.css'
-import Dashboard from './components/Dashboard'
+import React from 'react';
+import './App.css';
+import Dashboard from './components/Dashboard';
+import ErrorBoundary from './ErrorBoundary';
 
 function App() {
   return (
     <div className="app-container">
-      <Dashboard />
+      <ErrorBoundary>
+        <Dashboard />
+      </ErrorBoundary>
     </div>
-  )
+  );
 }
 
-export default App
+export default App;

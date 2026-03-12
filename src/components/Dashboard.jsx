@@ -51,7 +51,7 @@ const MultiSelect = ({ options, selected, onChange, placeholder, disabled, style
         className="filter-select"
         style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.6 : 1 }}
       >
-        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: maximizedPanel === 'drillLoc' ? 'none' : '120px' }}>{displayTxt}</span>
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '120px' }}>{displayTxt}</span>
         <ChevronDown size={14} style={{ flexShrink: 0 }} />
       </div>
       {isOpen && !disabled && (
@@ -60,7 +60,7 @@ const MultiSelect = ({ options, selected, onChange, placeholder, disabled, style
               <input type="checkbox" checked={selected.length === 0} onChange={() => handleToggle('ทั้งหมด')} style={{ accentColor: '#10b981' }} />
               <span style={{ fontSize: '0.85rem' }}>ทั้งหมด</span>
            </label>
-           <div style={{ height: '1px', background: 'var(--var-line-color)', margin: '4px 0' }} />
+           <div style={{ height: '1px', background: 'var(--line-color)', margin: '4px 0' }} />
            {options.map(opt => (
              <label key={opt.value} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.4rem', cursor: 'pointer', borderRadius: '4px' }} className="hover:bg-white/5">
                 <input type="checkbox" checked={selected.includes(opt.value)} onChange={() => handleToggle(opt.value)} style={{ accentColor: '#10b981' }} />
@@ -96,7 +96,7 @@ const GaugeChart = ({ title, actual, target, isIncome, theme }) => {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', padding: '1rem', background: 'var(--bg-highlight)', borderRadius: '12px' }}>
       <h4 style={{ fontSize: '0.9rem', fontWeight: '500', color: 'var(--text-secondary)', marginBottom: '0.75rem', textAlign: 'center' }}>{title}</h4>
-      <div style={{ width: '100%', height: '140px', position: 'relative' }}>
+      <div style={{ width: '100%', height: '140px', position: 'relative', minWidth: 0 }}>
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
             <Pie
@@ -117,11 +117,11 @@ const GaugeChart = ({ title, actual, target, isIncome, theme }) => {
           </PieChart>
         </ResponsiveContainer>
         <div style={{ position: 'absolute', bottom: '15px', left: '0', right: '0', textAlign: 'center' }}>
-          <div style={{ fontSize: '2rem', fontWeight: '700', color: color, lineHeight: '1' }}>{pct.toFixed(1)}%</div>
+          <div style={{ fontSize: '2rem', fontWeight: '700', color: target > 0 ? color : 'var(--text-secondary)', lineHeight: '1' }}>{target > 0 ? `${pct.toFixed(1)}%` : 'N/A'}</div>
         </div>
       </div>
       <div style={{ marginTop: '1rem', fontSize: '0.8rem', color: 'var(--text-secondary)', textAlign: 'center' }}>
-        เป้าหมาย: {target.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+        {target > 0 ? `เป้าหมาย: ${target.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : 'ยังไม่มีข้อมูลเป้าหมาย'}
       </div>
     </div>
   );
@@ -333,6 +333,22 @@ const Dashboard = () => {
     setSelectedOffice([]); 
   }, [selectedProvince, rawData]);
 
+  // Recompute available BG/EVM options based on activeTab, year, and filters
+  useEffect(() => {
+    if (!rawData.length) return;
+    const category = activeTab === 'income' ? 'รายได้' : 'ค่าใช้จ่าย';
+    let base = rawData.filter(r => r.category === category);
+    if (selectedYear) base = base.filter(r => r.year === selectedYear);
+    if (selectedProvince.length > 0) base = base.filter(r => selectedProvince.includes(r.province));
+    if (selectedOffice.length > 0) base = base.filter(r => selectedOffice.includes(r.office));
+    const bgs = [...new Set(base.map(r => r.businessGroup).filter(Boolean))].sort();
+    setAvailableBGs(bgs);
+    // EVM options further filtered by selected BGs if any
+    const evmBase = selectedBG.length > 0 ? base.filter(r => selectedBG.includes(r.businessGroup)) : base;
+    const evms = [...new Set(evmBase.map(r => r.evmService).filter(Boolean))].sort();
+    setAvailableEVMs(evms);
+  }, [rawData, activeTab, selectedYear, selectedProvince, selectedOffice, selectedBG]);
+
   const processed = useMemo(() => {
         if (!rawData.length || !selectedYear) return { 
       totals: {actual: 0, target: 0, prev: 0}, 
@@ -443,11 +459,16 @@ const Dashboard = () => {
       
     let topProv = "ไม่มีข้อมูล";
     if (processed.provinceAgg) {
-      const provs = Object.values(processed.provinceAgg).filter(p => p.target > 0);
-      if (provs.length > 0) {
-        if (isIncome) provs.sort((a,b) => (b.actual/b.target) - (a.actual/a.target));
-        else provs.sort((a,b) => (a.actual/a.target) - (b.actual/b.target));
-        topProv = provs[0].name;
+      const provsAll = Object.values(processed.provinceAgg).filter(p => p.actual > 0);
+      const provsWithTarget = provsAll.filter(p => p.target > 0);
+      if (provsWithTarget.length > 0) {
+        if (isIncome) provsWithTarget.sort((a,b) => (b.actual/b.target) - (a.actual/a.target));
+        else provsWithTarget.sort((a,b) => (a.actual/a.target) - (b.actual/b.target));
+        topProv = provsWithTarget[0].name;
+      } else if (provsAll.length > 0) {
+        // No target data yet — rank by actual 
+        provsAll.sort((a,b) => isIncome ? b.actual - a.actual : a.actual - b.actual);
+        topProv = provsAll[0].name;
       }
     }
 
@@ -594,7 +615,7 @@ const Dashboard = () => {
         </div>
       )}
 
-      {loading && !processed ? (
+      {loading ? (
         <div className="flex-center" style={{ height: '50vh', width: '100%' }}>
            <div className="text-gradient" style={{ fontSize: '2rem', fontWeight: 'bold', animation: 'pulse 1.5s infinite' }}>กำลังโหลดข้อมูล...</div>
         </div>
@@ -638,7 +659,7 @@ const Dashboard = () => {
             }}>
               <div>
                 <h2 style={{ fontSize: '1.5rem', fontWeight: '700', color: themeColor, marginBottom: '0.25rem' }}>ภาพรวม{isIncome ? 'รายได้' : 'ค่าใช้จ่าย'}</h2>
-                <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>ปี {selectedYear} {selectedMonth !== 'ทั้งหมด' ? `เดือน ${MONTH_NAMES[parseInt(selectedMonth)-1]}` : ''}</p>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>ปี {selectedYear} {selectedMonth.length === 1 ? `เดือน ${MONTH_NAMES[selectedMonth[0]-1]}` : selectedMonth.length > 1 ? `(${selectedMonth.length} เดือน)` : ''}</p>
               </div>
 
               <div style={{ background: `rgba(${isIncome ? '45,212,191' : '244,63,94'},0.15)`, padding: '1.25rem', borderRadius: '16px', border: `1px solid ${themeColor}40` }}>
@@ -661,7 +682,7 @@ const Dashboard = () => {
                 <div style={{ flex: 1, borderRadius: '12px', overflow: 'hidden', background: 'var(--bg-panel)' }}>
                   <MapContainer key={maximizedPanel === 'map' ? 'map-max' : 'map-min'} center={[16.2, 99.8]} zoom={6.5} style={{ height: '100%', width: '100%' }} zoomControl={false} scrollWheelZoom={false}>
                     <TileLayer url={`https://{s}.basemaps.cartocdn.com/${theme === 'dark' ? 'dark_nolabels' : 'light_nolabels'}/{z}/{x}/{y}{r}.png`} />
-                    {geoData && <GeoJSON key={activeTab + selectedYear + selectedMonth} data={geoData} style={getProvinceStyle} onEachFeature={onEachFeature} />}
+                    {geoData && <GeoJSON key={activeTab + selectedYear + selectedMonth.join(',')} data={geoData} style={getProvinceStyle} onEachFeature={onEachFeature} />}
                   </MapContainer>
                 </div>
              </div>
@@ -679,7 +700,7 @@ const Dashboard = () => {
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '1rem', minWidth: '600px' }}>
             
             {/* Top Filter Bar */}
-            <div className="glass-panel" style={{ padding: '0.75rem 1.25rem', display: 'flex', gap: '1.25rem', alignItems: 'center', flexWrap: 'wrap', borderRadius: '16px' }}>
+            <div className="glass-panel" style={{ padding: '0.75rem 1.25rem', display: 'flex', gap: '1.25rem', alignItems: 'center', flexWrap: 'wrap', borderRadius: '16px', position: 'relative', zIndex: 100 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <span style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>ปี พ.ศ.</span>
                 <select value={selectedYear} onChange={e => setSelectedYear(parseInt(e.target.value))} className="filter-select">
@@ -698,6 +719,31 @@ const Dashboard = () => {
                 <span style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>พื้นที่</span>
                 <MultiSelect selected={selectedProvince} onChange={setSelectedProvince} options={availableProvinces.map(p=>({label:p, value:p}))} />
                 <MultiSelect selected={selectedOffice} onChange={setSelectedOffice} options={availableOffices.map(o=>({label:o, value:o}))} disabled={selectedProvince.length !== 1} />
+              </div>
+
+              <div style={{ width: '1px', height: '20px', background: 'var(--line-color)' }}></div>
+
+              {/* Force line break — กลุ่มธุรกิจ + EVM Service go to row 2 */}
+              <div style={{ flexBasis: '100%', height: 0 }}></div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <span style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>กลุ่มธุรกิจ</span>
+                <MultiSelect
+                  selected={selectedBG}
+                  onChange={setSelectedBG}
+                  options={availableBGs.map(b => ({ label: b, value: b }))}
+                  style={{ minWidth: '170px' }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <span style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>EVM Service</span>
+                <MultiSelect
+                  selected={selectedEVM}
+                  onChange={setSelectedEVM}
+                  options={availableEVMs.map(e => ({ label: e, value: e }))}
+                  style={{ minWidth: '170px' }}
+                />
               </div>
 
               <button className="glass-button" onClick={fetchData} disabled={loading} style={{ marginLeft: 'auto', padding: '0.5rem 1rem' }}>
@@ -728,22 +774,25 @@ const Dashboard = () => {
                 </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+            <div
+              style={(maximizedPanel === 'drillBG' || maximizedPanel === 'drillLoc') ? { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9998, overflowY: 'auto', padding: '2rem', display: 'flex', flexDirection: 'column' } : { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}
+              onClick={(maximizedPanel === 'drillBG' || maximizedPanel === 'drillLoc') ? () => setMaximizedPanel(null) : undefined}
+            >
                 
                 {/* Hierarchical Breakdown (Business Group -> EVM Service) */}
-                <div className="glass-panel" style={maximizedPanel === 'drillBG' ? { position: 'fixed', top: '2rem', left: '2rem', right: '2rem', bottom: '2rem', zIndex: 9999, display: 'flex', flexDirection: 'column', padding: '2rem' } : { padding: '1.5rem', display: 'flex', flexDirection: 'column', flex: 1 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                <div className="glass-panel" style={maximizedPanel === 'drillBG' ? { display: 'flex', flexDirection: 'column', padding: '2rem', height: 'auto' } : (maximizedPanel === 'drillLoc' ? { display: 'none' } : { padding: '1.5rem', display: 'flex', flexDirection: 'column', minHeight: '300px' })} onClick={maximizedPanel === 'drillBG' ? (e => e.stopPropagation()) : undefined}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexShrink: 0 }}>
                        <h3 style={{ fontSize: maximizedPanel === 'drillBG' ? '1.5rem' : '1.1rem', fontWeight: '600', color: themeColor, margin: 0 }}>เจาะลึกกลุ่มธุรกิจ (Business Group)</h3>
                        <button onClick={() => setMaximizedPanel(maximizedPanel === 'drillBG' ? null : 'drillBG')} style={{ background: 'transparent', border: 'none', color: themeColor, cursor: 'pointer' }}>{maximizedPanel === 'drillBG' ? <Minimize2 size={24}/> : <Maximize2 size={18}/>}</button>
                     </div>
 
-                    <div style={{ display: 'flex', gap: '1rem', padding: '0.75rem 1rem', borderBottom: '1px solid var(--line-color)', fontWeight: '600', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
+                    <div style={{ display: 'flex', gap: '1rem', padding: '0.75rem 1rem', borderBottom: '1px solid var(--line-color)', fontWeight: '600', color: 'var(--text-secondary)', fontSize: '0.8rem', flexShrink: 0 }}>
                         <div style={{ flex: 2.5 }}>กลุ่มธุรกิจ / บริการ</div>
                         <div style={{ flex: 1, textAlign: 'right' }}>ผลงานจริง</div>
                         <div style={{ flex: 1, textAlign: 'right' }}>% สำเร็จ</div>
                     </div>
 
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '0.5rem', overflowY: 'auto', flex: 1 }}>
+                    <div style={{ display: 'block', marginTop: '0.5rem', overflowX: 'hidden', overflowY: 'visible' }}>
                         {processed.hierarchicalData.map((bg, idx) => {
                            const isExpanded = !!expandedBGs[bg.name];
                            const pct = bg.target > 0 ? (bg.actual / bg.target) * 100 : 0;
@@ -783,20 +832,20 @@ const Dashboard = () => {
                 </div>
 
                 {/* Hierarchical Breakdown (Province -> Office) with Proportions*/}
-                <div className="glass-panel" style={maximizedPanel === 'drillLoc' ? { position: 'fixed', top: '2rem', left: '2rem', right: '2rem', bottom: '2rem', zIndex: 9999, display: 'flex', flexDirection: 'column', padding: '2rem' } : { padding: '1.5rem', display: 'flex', flexDirection: 'column', flex: 1 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                <div className="glass-panel" style={maximizedPanel === 'drillLoc' ? { display: 'flex', flexDirection: 'column', padding: '2rem', height: 'auto' } : (maximizedPanel === 'drillBG' ? { display: 'none' } : { padding: '1.5rem', display: 'flex', flexDirection: 'column', minHeight: '300px' })} onClick={maximizedPanel === 'drillLoc' ? (e => e.stopPropagation()) : undefined}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexShrink: 0 }}>
                        <h3 style={{ fontSize: maximizedPanel === 'drillLoc' ? '1.5rem' : '1.1rem', fontWeight: '600', color: themeColor, margin: 0 }}>เจาะลึกจังหวัด (Provinces)</h3>
                        <button onClick={() => setMaximizedPanel(maximizedPanel === 'drillLoc' ? null : 'drillLoc')} style={{ background: 'transparent', border: 'none', color: themeColor, cursor: 'pointer' }}>{maximizedPanel === 'drillLoc' ? <Minimize2 size={24}/> : <Maximize2 size={18}/>}</button>
                     </div>
 
-                    <div style={{ display: 'flex', gap: '0.5rem', padding: '0.75rem 1rem', borderBottom: '1px solid var(--line-color)', fontWeight: '600', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
+                    <div style={{ display: 'flex', gap: '0.5rem', padding: '0.75rem 1rem', borderBottom: '1px solid var(--line-color)', fontWeight: '600', color: 'var(--text-secondary)', fontSize: '0.8rem', flexShrink: 0 }}>
                         <div style={{ flex: 2.2 }}>จังหวัด / ที่ทำการ</div>
                         <div style={{ flex: 0.8, textAlign: 'right' }}>ผลงานจริง</div>
                         <div style={{ flex: 0.8, textAlign: 'right' }}>% สำเร็จ</div>
                         <div style={{ flex: 1, textAlign: 'right' }}>สัดส่วนรวม</div>
                     </div>
 
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '0.5rem', overflowY: 'auto', flex: 1 }}>
+                    <div style={{ display: 'block', marginTop: '0.5rem', overflowX: 'hidden', overflowY: 'visible' }}>
                         {processed.hierarchicalLocationData.map((prov, idx) => {
                            const isExpanded = !!expandedProvs[prov.name];
                            const pct = prov.target > 0 ? (prov.actual / prov.target) * 100 : 0;
