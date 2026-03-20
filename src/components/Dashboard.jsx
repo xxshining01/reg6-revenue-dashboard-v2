@@ -1,3 +1,24 @@
+
+// Inject custom styles for map labels
+if (typeof document !== 'undefined') {
+  const style = document.createElement('style');
+  style.innerHTML = `
+    .leaflet-tooltip.clean-label {
+      background: transparent !important;
+      border: none !important;
+      box-shadow: none !important;
+      padding: 0 !important;
+      color: white !important;
+    }
+    .leaflet-popup-content-wrapper, .leaflet-popup-tip {
+      background: rgba(15, 23, 42, 0.9) !important;
+      color: white !important;
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+  `;
+  document.head.appendChild(style);
+}
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import Papa from 'papaparse';
 import { 
@@ -6,6 +27,7 @@ import {
 } from 'recharts';
 import { Activity, DollarSign, TrendingUp, TrendingDown, RefreshCw, AlertCircle, Filter, Target, MapPin, Layers, ChevronRight, ChevronDown, Sparkles, Sun, Moon, Download, Camera, Maximize2, Minimize2 } from 'lucide-react';
 import html2canvas from 'html2canvas';
+import * as XLSX from 'xlsx';
 import { MapContainer, TileLayer, GeoJSON } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 
@@ -99,8 +121,7 @@ const GaugeChart = ({ title, actual, target, isIncome, theme }) => {
       <div style={{ width: '100%', height: '140px', position: 'relative', minWidth: 0 }}>
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
-            <Pie
-              data={data}
+            <Pie data={data}
               cx="50%"
               cy="100%"
               startAngle={180}
@@ -109,8 +130,7 @@ const GaugeChart = ({ title, actual, target, isIncome, theme }) => {
               outerRadius={115}
               dataKey="value"
               stroke="none"
-              isAnimationActive={true}
-            >
+               isAnimationActive={true} >
               <Cell fill={color} />
               <Cell fill="var(--glass-border)" />
             </Pie>
@@ -128,22 +148,65 @@ const GaugeChart = ({ title, actual, target, isIncome, theme }) => {
 };
 
 
-const BusinessGroupDoughnut = ({ data, maximizedPanel, setMaximizedPanel }) => {
+
+// Helper: format abbreviated amount (e.g. 52700000 → 52.7M)
+function fmtAbbrev(v) {
+  if (v >= 1e9) return (v/1e9).toFixed(1) + 'B';
+  if (v >= 1e6) return (v/1e6).toFixed(1) + 'M';
+  if (v >= 1e3) return (v/1e3).toFixed(0) + 'K';
+  return v.toFixed(0);
+}
+// Truncate long name
+function shortName(name, max=10) {
+  const n = name.replace(/^\d+\.\d*\s*/, ''); // remove "1.2 " prefix
+  return n.length > max ? n.slice(0, max) + '…' : n;
+}
+
+const BusinessGroupDoughnut = ({ data, maximizedPanel, setMaximizedPanel, onCapture, onExport }) => {
   const chartData = data?.map(bg => ({ name: bg.name, value: bg.actual })).filter(d => d.value > 0) || [];
   const COLORS = ['#0d9488', '#ec4899', '#f59e0b', '#3b82f6', '#ef4444', '#84cc16', '#8b5cf6', '#a855f7', '#14b8a6'];
   if (chartData.length === 0) return null;
-  
+
+  const total = chartData.reduce((s, d) => s + d.value, 0);
+
+  const renderSliceLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, name, value }) => {
+    const pct = total > 0 ? ((value / total) * 100) : 0;
+    if (pct < 3) return null; // skip tiny slices
+    const RADIAN = Math.PI / 180;
+    const radius = innerRadius + (outerRadius - innerRadius) * 0.55;
+    const x = cx + radius * Math.cos(-midAngle * RADIAN);
+    const y = cy + radius * Math.sin(-midAngle * RADIAN);
+    return (
+      <text
+        x={x} y={y}
+        textAnchor="middle" dominantBaseline="central"
+        style={{ fontSize: "0.65rem", fontWeight: "700", fontFamily: "Outfit, sans-serif", pointerEvents: "none" }}
+        fill="#ffffff"
+        stroke="rgba(0,0,0,0.6)" strokeWidth={2} paintOrder="stroke"
+      >
+        <tspan x={x} dy="-0.9em">{shortName(name, 8)}</tspan>
+        <tspan x={x} dy="1.1em">{fmtAbbrev(value)}</tspan>
+        <tspan x={x} dy="1.1em">{pct.toFixed(1)}%</tspan>
+      </text>
+    );
+  };
+
   return (
-    <div className="glass-panel" style={maximizedPanel === 'donut' ? { position: 'fixed', top: '2rem', left: '2rem', right: '2rem', bottom: '2rem', zIndex: 9999, display: 'flex', flexDirection: 'column', padding: '2rem' } : { padding: '1.25rem', display: 'flex', flexDirection: 'column', height: '350px' }}>
+    <div data-panel-id="donut" className="glass-panel" style={maximizedPanel === 'donut' ? { position: 'fixed', top: '2rem', left: '2rem', right: '2rem', bottom: '2rem', zIndex: 9999, display: 'flex', flexDirection: 'column', padding: '2rem' } : { padding: '1.25rem', display: 'flex', flexDirection: 'column', height: '350px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
          <h3 style={{ fontSize: maximizedPanel === 'donut' ? '1.5rem' : '1rem', fontWeight: '600', color: 'var(--text-primary)', margin: 0 }}>สัดส่วนตามกลุ่มธุรกิจ</h3>
-         <button onClick={() => setMaximizedPanel(maximizedPanel === 'donut' ? null : 'donut')} style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}>{maximizedPanel === 'donut' ? <Minimize2 size={24}/> : <Maximize2 size={18}/>}</button>
+         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+           {maximizedPanel === 'donut' && (<>
+             <button onClick={onCapture} title="แคปเจอร์เป็นภาพ" style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', color: 'var(--text-primary)', borderRadius: '8px', padding: '0.4rem 0.5rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.8rem', fontFamily: 'Outfit' }}><Camera size={15} /> ภาพ</button>
+             <button onClick={onExport} title="ดาวน์โหลด Excel" style={{ background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.3)', color: '#10b981', borderRadius: '8px', padding: '0.4rem 0.5rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.8rem', fontFamily: 'Outfit' }}><Download size={15} /> Excel</button>
+           </>)}
+           <button onClick={() => setMaximizedPanel(maximizedPanel === 'donut' ? null : 'donut')} style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}>{maximizedPanel === 'donut' ? <Minimize2 size={24}/> : <Maximize2 size={18}/>}</button>
+         </div>
       </div>
       <div style={{ flex: 1, minHeight: 0 }}>
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
-            <Pie
-              data={chartData}
+            <Pie data={chartData}
               cx="50%"
               cy="50%"
               innerRadius="40%"
@@ -151,15 +214,14 @@ const BusinessGroupDoughnut = ({ data, maximizedPanel, setMaximizedPanel }) => {
               paddingAngle={3}
               dataKey="value"
               stroke="none"
-              isAnimationActive={true}
-            >
+               isAnimationActive={false} label={renderSliceLabel} labelLine={false} >
               {chartData.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
             </Pie>
             <RechartsTooltip 
               formatter={(value) => [value.toLocaleString(undefined, { maximumFractionDigits: 0 }), 'ผลงาน']}
               contentStyle={{ background: 'var(--bg-panel-secondary)', border: '1px solid var(--glass-border)', borderRadius: '8px', color: 'var(--text-primary)' }}
             />
-            <Legend verticalAlign="bottom" wrapperStyle={{ fontSize: '0.75rem', color: 'var(--text-secondary)', paddingTop: '10px' }} />
+            <Legend verticalAlign="bottom" layout="horizontal" iconSize={8} wrapperStyle={{ fontSize: '0.7rem', color: 'var(--text-secondary)', paddingTop: '4px' }} formatter={(value) => shortName(value, 12)} />
           </PieChart>
         </ResponsiveContainer>
       </div>
@@ -304,13 +366,22 @@ const Dashboard = () => {
         setRawData(parsed);
         const years = [...new Set(parsed.map(r => r.year))].sort((a,b) => b - a);
         setAvailableYears(years);
-        if (years.length > 0) setSelectedYear(years[0]);
+        const latestYear = years.length > 0 ? years[0] : null;
+        if (latestYear) setSelectedYear(latestYear);
 
         const targetProvincesTh = Object.values(PROVINCE_MAP_EN_TH);
         const provinces = [...new Set(parsed.map(r => r.province))].filter(p => targetProvincesTh.includes(p)).sort();
         setAvailableProvinces(provinces);
         setAvailableBGs([...new Set(parsed.map(r => r.businessGroup))].sort());
         setAvailableEVMs([...new Set(parsed.map(r => r.evmService))].sort());
+
+        if (latestYear) {
+          const incomeRows = parsed.filter(r => r.year === latestYear && r.category === 'รายได้' && r.actual > 0 && r.month >= 1 && r.month <= 12);
+          const latestMonth = incomeRows.length > 0 ? Math.max(...incomeRows.map(r => r.month)) : null;
+          if (latestMonth) {
+            setSelectedMonth(Array.from({ length: latestMonth }, (_, i) => i + 1));
+          }
+        }
 
         setLoading(false);
       },
@@ -510,19 +581,34 @@ const Dashboard = () => {
     const thName = PROVINCE_MAP_EN_TH[feature.properties.NAME_1];
     const data = processed?.provinceAgg[thName];
 
-    let popupContent = `<b>${thName}</b><br/>ไม่พบข้อมูล`;
     if (data) {
       const pct = data.target > 0 ? ((data.actual / data.target) * 100).toFixed(1) : 0;
-      popupContent = `
-        <div style="font-family: Outfit, sans-serif;">
-          <b style="font-size: 14px;">จังหวัด${thName}</b><br/>
-          ผลงาน: ฿${data.actual.toLocaleString(undefined, { maximumFractionDigits: 0 })}<br/>
-          เป้าหมาย: ฿${data.target.toLocaleString(undefined, { maximumFractionDigits: 0 })}<br/>
-          ความสำเร็จ: <b>${pct}%</b>
+      const abbrev = data.actual >= 1e6 ? (data.actual/1e6).toFixed(1)+'M' : data.actual >= 1e3 ? (data.actual/1e3).toFixed(0)+'K' : data.actual.toFixed(0);
+      
+      const labelHtml = `<div style="text-align:center;color:#fff;text-shadow:-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000,0 1px 3px rgba(0,0,0,0.8);font-weight:800;font-size:11px;line-height:1;pointer-events:none;">${thName}<br/><span style="font-size:9px;opacity:0.95;">${abbrev}</span></div>`;
+      
+      layer.bindTooltip(labelHtml, {
+        permanent: true,
+        direction: 'center',
+        className: 'clean-label',
+        opacity: 1
+      });
+
+      const popupContent = `
+        <div style="font-family:Outfit,sans-serif;color:#fff;padding:4px;">
+          <b style="font-size:14px;color:${themeColor}">จังหวัด${thName}</b><br/>
+          <div style="margin-top:5px;font-size:12px;">
+            ผลงาน: ฿${data.actual.toLocaleString()}<br/>
+            เป้าหมาย: ฿${data.target.toLocaleString()}<br/>
+            ความสำเร็จ: <b style="color:${getPerfColor(data.actual, data.target)}">${pct}%</b>
+          </div>
         </div>
       `;
+      layer.bindPopup(popupContent);
+    } else {
+      layer.bindTooltip(thName, { permanent: true, direction: 'center', className: 'clean-label', opacity: 0.5 });
+      layer.bindPopup(`<b>${thName}</b><br/>ไม่พบข้อมูลข้อมูล`);
     }
-    layer.bindTooltip(popupContent, { sticky: true });
   };
 
   const getPerfColor = (actual, target) => {
@@ -546,18 +632,55 @@ const Dashboard = () => {
     </div>
   );
 
+  // Utility: capture a panel element by data-panel-id attr
+  const capturePanelById = async (panelId, filename) => {
+    const el = document.querySelector('[data-panel-id="' + panelId + '"]');
+    if (!el) return;
+    try {
+      const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: theme === 'dark' ? '#09090b' : '#f8fafc', logging: false });
+      const link = document.createElement('a');
+      link.download = filename;
+      link.href = canvas.toDataURL('image/png', 1.0);
+      link.click();
+    } catch(err) { console.error('Capture error', err); }
+  };
+
+  // Utility: export rows to xlsx
+  const exportXLSX = (rows, filename) => {
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(rows);
+    XLSX.utils.book_append_sheet(wb, ws, 'ข้อมูล');
+    XLSX.writeFile(wb, filename);
+  };
+
+  const handleResetFilters = () => {
+    setSelectedBG([]);
+    setSelectedEVM([]);
+    setSelectedProvince([]);
+    setSelectedOffice([]);
+    if (rawData.length && selectedYear) {
+      const incomeRows = rawData.filter(r => r.year === selectedYear && r.category === 'รายได้' && r.actual > 0 && r.month >= 1 && r.month <= 12);
+      const latestMonth = incomeRows.length > 0 ? Math.max(...incomeRows.map(r => r.month)) : null;
+      if (latestMonth) {
+        setSelectedMonth(Array.from({ length: latestMonth }, (_, i) => i + 1));
+      } else { setSelectedMonth([]); }
+    } else { setSelectedMonth([]); }
+  };
+
   return (
     <>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '1.5rem 1.75rem 0.75rem', maxWidth: '100%', boxSizing: 'border-box' }}>
-         <button 
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', padding: '1.5rem 1.75rem 0.75rem', maxWidth: '100%', boxSizing: 'border-box' }}>
+         <button
+           onClick={fetchData} disabled={loading}
+           style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.6rem 1.25rem', borderRadius: '9999px', background: 'rgba(255,255,255,0.08)', color: '#ffffff', cursor: loading ? 'not-allowed' : 'pointer', fontWeight: '600', fontSize: '0.95rem', transition: 'all 0.3s', opacity: loading ? 0.7 : 1, backdropFilter: 'blur(8px)', border: '1px solid rgba(255,255,255,0.15)' }}
+           onMouseOver={(e) => { if (!loading) { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.background = 'rgba(255,255,255,0.15)'; } }}
+           onMouseOut={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; }}
+         >
+           <RefreshCw size={18} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} /> รีเฟรชข้อมูล
+         </button>
+         <button
            onClick={() => setIsExportModalOpen(true)}
-           style={{ 
-             display: 'flex', alignItems: 'center', gap: '0.4rem',
-             padding: '0.6rem 1.25rem', borderRadius: '9999px', border: 'none',
-             background: '#10b981', color: '#ffffff', cursor: 'pointer',
-             fontWeight: '700', fontSize: '0.95rem', boxShadow: '0 4px 6px -1px rgba(16, 185, 129, 0.4)',
-             transition: 'all 0.3s'
-           }}
+           style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.6rem 1.25rem', borderRadius: '9999px', border: 'none', background: '#10b981', color: '#ffffff', cursor: 'pointer', fontWeight: '700', fontSize: '0.95rem', boxShadow: '0 4px 6px -1px rgba(16, 185, 129, 0.4)', transition: 'all 0.3s' }}
            onMouseOver={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 6px 8px -1px rgba(16, 185, 129, 0.5)'; }}
            onMouseOut={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(16, 185, 129, 0.4)'; }}
          >
@@ -674,10 +797,27 @@ const Dashboard = () => {
             </div>
 
              {/* Top Provinces Map */}
-             <div className="glass-panel" style={maximizedPanel === 'map' ? { position: 'fixed', top: '2rem', left: '2rem', right: '2rem', bottom: '2rem', zIndex: 9999, display: 'flex', flexDirection: 'column', padding: '2rem' } : { padding: '1rem', display: 'flex', flexDirection: 'column', height: '400px' }}>
+             <div data-panel-id="map" className="glass-panel" style={maximizedPanel === 'map' ? { position: 'fixed', top: '2rem', left: '2rem', right: '2rem', bottom: '2rem', zIndex: 9999, display: 'flex', flexDirection: 'column', padding: '2rem' } : { padding: '1rem', display: 'flex', flexDirection: 'column', height: '400px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
                   <h3 style={{ fontSize: maximizedPanel === 'map' ? '1.5rem' : '1rem', fontWeight: '600', color: 'var(--text-primary)', margin: 0 }}>แผนที่ผลงานจังหวัด</h3>
-                  <button onClick={() => setMaximizedPanel(maximizedPanel === 'map' ? null : 'map')} style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}>{maximizedPanel === 'map' ? <Minimize2 size={24}/> : <Maximize2 size={18}/>}</button>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    {maximizedPanel === 'map' && (<>
+                      <button onClick={() => capturePanelById('map', 'province-map.png')} title="แคปเจอร์เป็นภาพ" style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', color: 'var(--text-primary)', borderRadius: '8px', padding: '0.4rem 0.5rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.8rem', fontFamily: 'Outfit' }}><Camera size={15} /> ภาพ</button>
+                      <button onClick={() => {
+                        const rows = (processed?.hierarchicalLocationData || []).flatMap(p =>
+                          p.offices.map(o => ({
+                            'จังหวัด': p.name,
+                            'ที่ทำการ': o.name,
+                            'ผลงานจริง': o.actual,
+                            'เป้าหมาย': o.target,
+                            '% สำเร็จ': o.target > 0 ? +((o.actual / o.target) * 100).toFixed(1) : 'N/A'
+                          }))
+                        );
+                        exportXLSX(rows, 'province-map-data.xlsx');
+                      }} title="ดาวน์โหลด Excel" style={{ background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.3)', color: '#10b981', borderRadius: '8px', padding: '0.4rem 0.5rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.8rem', fontFamily: 'Outfit' }}><Download size={15} /> Excel</button>
+                    </>)}
+                    <button onClick={() => setMaximizedPanel(maximizedPanel === 'map' ? null : 'map')} style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}>{maximizedPanel === 'map' ? <Minimize2 size={24}/> : <Maximize2 size={18}/>}</button>
+                  </div>
                 </div>
                 <div style={{ flex: 1, borderRadius: '12px', overflow: 'hidden', background: 'var(--bg-panel)' }}>
                   <MapContainer key={maximizedPanel === 'map' ? 'map-max' : 'map-min'} center={[16.2, 99.8]} zoom={6.5} style={{ height: '100%', width: '100%' }} zoomControl={false} scrollWheelZoom={false}>
@@ -688,7 +828,23 @@ const Dashboard = () => {
              </div>
              
              {/* Business Group Doughnut */}
-             <BusinessGroupDoughnut data={processed?.hierarchicalData} maximizedPanel={maximizedPanel} setMaximizedPanel={setMaximizedPanel} />
+             <BusinessGroupDoughnut
+                data={processed?.hierarchicalData}
+                maximizedPanel={maximizedPanel}
+                setMaximizedPanel={setMaximizedPanel}
+                onCapture={() => capturePanelById('donut', 'donut-chart.png')}
+                onExport={() => {
+                  const total = (processed?.hierarchicalData || []).reduce((s, d) => s + d.actual, 0);
+                  const rows = (processed?.hierarchicalData || []).map(bg => ({
+                    'กลุ่มธุรกิจ': bg.name,
+                    'ผลงานจริง': bg.actual,
+                    'เป้าหมาย': bg.target,
+                    '% สำเร็จ': bg.target > 0 ? +((bg.actual / bg.target) * 100).toFixed(1) : 'N/A',
+                    '% ของรวม': total > 0 ? +((bg.actual / total) * 100).toFixed(1) : 0
+                  }));
+                  exportXLSX(rows, 'business-group-summary.xlsx');
+                }}
+              />
           </div>
 
                 {/* Maximize Overlay Backdrop */}
@@ -746,17 +902,36 @@ const Dashboard = () => {
                 />
               </div>
 
-              <button className="glass-button" onClick={fetchData} disabled={loading} style={{ marginLeft: 'auto', padding: '0.5rem 1rem' }}>
-                <RefreshCw size={16} className={loading ? 'animate-spin' : ''} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} />
-                <span>รีเฟรชข้อมูล</span>
+              <button
+                onClick={handleResetFilters}
+                style={{ marginLeft: 'auto', padding: '0.5rem 1rem', display: 'inline-flex', alignItems: 'center', gap: '0.4rem', background: 'rgba(251,113,133,0.15)', border: '1px solid rgba(251,113,133,0.35)', color: '#fb7185', borderRadius: '10px', cursor: 'pointer', fontFamily: 'Outfit', fontWeight: '600', fontSize: '0.875rem', transition: 'all 0.2s' }}
+                onMouseOver={(e) => { e.currentTarget.style.background = 'rgba(251,113,133,0.25)'; }}
+                onMouseOut={(e) => { e.currentTarget.style.background = 'rgba(251,113,133,0.15)'; }}
+              >
+                <Filter size={14} /> รีเซ็ตฟิลเตอร์
               </button>
             </div>
 
             {/* Monthly Trend Chart */}
-            <div className="glass-panel" style={maximizedPanel === 'trend' ? { position: 'fixed', top: '2rem', left: '2rem', right: '2rem', bottom: '2rem', zIndex: 9999, display: 'flex', flexDirection: 'column', padding: '2rem' } : { padding: '1.25rem', height: '320px', display: 'flex', flexDirection: 'column' }}>
+            <div data-panel-id="trend" className="glass-panel" style={maximizedPanel === 'trend' ? { position: 'fixed', top: '2rem', left: '2rem', right: '2rem', bottom: '2rem', zIndex: 9999, display: 'flex', flexDirection: 'column', padding: '2rem' } : { padding: '1.25rem', height: '320px', display: 'flex', flexDirection: 'column' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
                   <h3 style={{ fontSize: maximizedPanel === 'trend' ? '1.5rem' : '1rem', fontWeight: '600', color: 'var(--text-primary)', margin: 0 }}>แนวโน้มผลงานรายเดือน (ม.ค. - ธ.ค.)</h3>
-                  <button onClick={() => setMaximizedPanel(maximizedPanel === 'trend' ? null : 'trend')} style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}>{maximizedPanel === 'trend' ? <Minimize2 size={24}/> : <Maximize2 size={18}/>}</button>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    {maximizedPanel === 'trend' && (<>
+                      <button onClick={() => capturePanelById('trend', 'monthly-trend.png')} title="แคปเจอร์เป็นภาพ" style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', color: 'var(--text-primary)', borderRadius: '8px', padding: '0.4rem 0.5rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.8rem', fontFamily: 'Outfit' }}><Camera size={15} /> ภาพ</button>
+                      <button onClick={() => {
+                        const MNAMES = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+                        const rows = (processed?.monthlyData || []).map((m, i) => ({
+                          'เดือน': MNAMES[i],
+                          'ผลงานจริง': m.actual,
+                          'เป้าหมาย': m.target,
+                          'ผลงานปีก่อน': m.prev
+                        }));
+                        exportXLSX(rows, 'monthly-trend.xlsx');
+                      }} title="ดาวน์โหลด Excel" style={{ background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.3)', color: '#10b981', borderRadius: '8px', padding: '0.4rem 0.5rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.8rem', fontFamily: 'Outfit' }}><Download size={15} /> Excel</button>
+                    </>)}
+                    <button onClick={() => setMaximizedPanel(maximizedPanel === 'trend' ? null : 'trend')} style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}>{maximizedPanel === 'trend' ? <Minimize2 size={24}/> : <Maximize2 size={18}/>}</button>
+                  </div>
                 </div>
                 <div style={{ flex: 1, minHeight: 0 }}>
                   <ResponsiveContainer width="100%" height="100%">
@@ -780,10 +955,27 @@ const Dashboard = () => {
             >
                 
                 {/* Hierarchical Breakdown (Business Group -> EVM Service) */}
-                <div className="glass-panel" style={maximizedPanel === 'drillBG' ? { display: 'flex', flexDirection: 'column', padding: '2rem', height: 'auto' } : (maximizedPanel === 'drillLoc' ? { display: 'none' } : { padding: '1.5rem', display: 'flex', flexDirection: 'column', minHeight: '300px' })} onClick={maximizedPanel === 'drillBG' ? (e => e.stopPropagation()) : undefined}>
+                <div data-panel-id="drillBG" className="glass-panel" style={maximizedPanel === 'drillBG' ? { display: 'flex', flexDirection: 'column', padding: '2rem', height: 'auto' } : (maximizedPanel === 'drillLoc' ? { display: 'none' } : { padding: '1.5rem', display: 'flex', flexDirection: 'column', minHeight: '300px' })} onClick={maximizedPanel === 'drillBG' ? (e => e.stopPropagation()) : undefined}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexShrink: 0 }}>
                        <h3 style={{ fontSize: maximizedPanel === 'drillBG' ? '1.5rem' : '1.1rem', fontWeight: '600', color: themeColor, margin: 0 }}>เจาะลึกกลุ่มธุรกิจ (Business Group)</h3>
-                       <button onClick={() => setMaximizedPanel(maximizedPanel === 'drillBG' ? null : 'drillBG')} style={{ background: 'transparent', border: 'none', color: themeColor, cursor: 'pointer' }}>{maximizedPanel === 'drillBG' ? <Minimize2 size={24}/> : <Maximize2 size={18}/>}</button>
+                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                         {maximizedPanel === 'drillBG' && (<>
+                           <button onClick={() => capturePanelById('drillBG', 'business-group-detail.png')} title="แคปเจอร์เป็นภาพ" style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', color: 'var(--text-primary)', borderRadius: '8px', padding: '0.4rem 0.5rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.8rem', fontFamily: 'Outfit' }}><Camera size={15} /> ภาพ</button>
+                           <button onClick={() => {
+                             const rows = (processed?.hierarchicalData || []).flatMap(bg =>
+                               bg.evms.map(evm => ({
+                                 'กลุ่มธุรกิจ': bg.name,
+                                 'EVM Service': evm.name,
+                                 'ผลงานจริง': evm.actual,
+                                 'เป้าหมาย': evm.target,
+                                 '% สำเร็จ': evm.target > 0 ? +((evm.actual / evm.target) * 100).toFixed(1) : 'N/A'
+                               }))
+                             );
+                             exportXLSX(rows, 'business-group-detail.xlsx');
+                           }} title="ดาวน์โหลด Excel" style={{ background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.3)', color: '#10b981', borderRadius: '8px', padding: '0.4rem 0.5rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.8rem', fontFamily: 'Outfit' }}><Download size={15} /> Excel</button>
+                         </>)}
+                         <button onClick={() => setMaximizedPanel(maximizedPanel === 'drillBG' ? null : 'drillBG')} style={{ background: 'transparent', border: 'none', color: themeColor, cursor: 'pointer' }}>{maximizedPanel === 'drillBG' ? <Minimize2 size={24}/> : <Maximize2 size={18}/>}</button>
+                       </div>
                     </div>
 
                     <div style={{ display: 'flex', gap: '1rem', padding: '0.75rem 1rem', borderBottom: '1px solid var(--line-color)', fontWeight: '600', color: 'var(--text-secondary)', fontSize: '0.8rem', flexShrink: 0 }}>
@@ -832,10 +1024,19 @@ const Dashboard = () => {
                 </div>
 
                 {/* Hierarchical Breakdown (Province -> Office) with Proportions*/}
-                <div className="glass-panel" style={maximizedPanel === 'drillLoc' ? { display: 'flex', flexDirection: 'column', padding: '2rem', height: 'auto' } : (maximizedPanel === 'drillBG' ? { display: 'none' } : { padding: '1.5rem', display: 'flex', flexDirection: 'column', minHeight: '300px' })} onClick={maximizedPanel === 'drillLoc' ? (e => e.stopPropagation()) : undefined}>
+                <div data-panel-id="drillLoc" className="glass-panel" style={maximizedPanel === 'drillLoc' ? { display: 'flex', flexDirection: 'column', padding: '2rem', height: 'auto' } : (maximizedPanel === 'drillBG' ? { display: 'none' } : { padding: '1.5rem', display: 'flex', flexDirection: 'column', minHeight: '300px' })} onClick={maximizedPanel === 'drillLoc' ? (e => e.stopPropagation()) : undefined}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexShrink: 0 }}>
                        <h3 style={{ fontSize: maximizedPanel === 'drillLoc' ? '1.5rem' : '1.1rem', fontWeight: '600', color: themeColor, margin: 0 }}>เจาะลึกจังหวัด (Provinces)</h3>
-                       <button onClick={() => setMaximizedPanel(maximizedPanel === 'drillLoc' ? null : 'drillLoc')} style={{ background: 'transparent', border: 'none', color: themeColor, cursor: 'pointer' }}>{maximizedPanel === 'drillLoc' ? <Minimize2 size={24}/> : <Maximize2 size={18}/>}</button>
+                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                         {maximizedPanel === 'drillLoc' && (<>
+                           <button onClick={() => capturePanelById('drillLoc', 'province-detail.png')} title="แคปเจอร์เป็นภาพ" style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', color: 'var(--text-primary)', borderRadius: '8px', padding: '0.4rem 0.5rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.8rem', fontFamily: 'Outfit' }}><Camera size={15} /> ภาพ</button>
+                           <button onClick={() => {
+                             const rows = (processed?.hierarchicalLocationData || []).flatMap(p => p.offices.map(o => ({ 'จังหวัด': p.name, 'ที่ทำการ': o.name, 'ผลงานจริง': o.actual, 'เป้าหมาย': o.target, '% สำเร็จ': o.target > 0 ? +((o.actual / o.target) * 100).toFixed(1) : 'N/A' })));
+                             exportXLSX(rows, 'province-detail.xlsx');
+                           }} title="ดาวน์โหลด Excel" style={{ background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.3)', color: '#10b981', borderRadius: '8px', padding: '0.4rem 0.5rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.8rem', fontFamily: 'Outfit' }}><Download size={15} /> Excel</button>
+                         </>)}
+<button onClick={() => setMaximizedPanel(maximizedPanel === 'drillLoc' ? null : 'drillLoc')} style={{ background: 'transparent', border: 'none', color: themeColor, cursor: 'pointer' }}>{maximizedPanel === 'drillLoc' ? <Minimize2 size={24}/> : <Maximize2 size={18}/>}</button>
+                       </div>
                     </div>
 
                     <div style={{ display: 'flex', gap: '0.5rem', padding: '0.75rem 1rem', borderBottom: '1px solid var(--line-color)', fontWeight: '600', color: 'var(--text-secondary)', fontSize: '0.8rem', flexShrink: 0 }}>
