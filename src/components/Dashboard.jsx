@@ -25,7 +25,7 @@ import {
   BarChart, Bar, AreaChart, Area, PieChart, Pie, Cell, 
   XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend, ComposedChart, Line
 } from 'recharts';
-import { Activity, DollarSign, TrendingUp, TrendingDown, RefreshCw, AlertCircle, Filter, Target, MapPin, Layers, ChevronRight, ChevronDown, Sparkles, Sun, Moon, Download, Camera, Maximize2, Minimize2 } from 'lucide-react';
+import { Activity, DollarSign, TrendingUp, TrendingDown, RefreshCw, AlertCircle, Filter, Target, MapPin, Layers, ChevronRight, ChevronDown, Sparkles, Sun, Moon, Download, Camera, Maximize2, Minimize2, ArrowUp } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import * as XLSX from 'xlsx';
 import { MapContainer, TileLayer, GeoJSON } from 'react-leaflet';
@@ -235,11 +235,25 @@ const Dashboard = () => {
   const captureAndDownload = async (filename) => {
     if (!dashboardRef.current) return;
     try {
+      const now = new Date();
+      const timeStr = now.toLocaleDateString('th-TH') + ' เวลา ' + now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) + ' น.';
       const canvas = await html2canvas(dashboardRef.current, {
-        scale: 2,
-        useCORS: true,
-        backgroundColor: theme === 'dark' ? '#09090b' : '#f8fafc',
-      });
+          scale: 2,
+          useCORS: true,
+          backgroundColor: theme === 'dark' ? '#09090b' : '#f8fafc',
+          onclone: (clonedDoc) => {
+            const watermark = clonedDoc.createElement('div');
+            watermark.style.cssText = 'position: absolute; top: 18px; right: 28px; font-size: 13px; color: ' + (theme === 'dark' ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.6)') + '; text-align: right; line-height: 1.5; font-family: Outfit, sans-serif; font-weight: 500; z-index: 999;';
+            watermark.innerHTML = "ข้อมูลที่ Capture ณ วันที่: " + timeStr;
+            const header = clonedDoc.querySelector('.dashboard-container > div > div.glass-panel');
+            if (header) {
+                if (window.getComputedStyle(header).position === 'static') header.style.position = 'relative';
+                header.appendChild(watermark);
+            } else {
+                clonedDoc.body.appendChild(watermark);
+            }
+          }
+        });
       const image = canvas.toDataURL("image/png", 1.0);
       const link = document.createElement("a");
       link.download = filename;
@@ -576,39 +590,160 @@ const Dashboard = () => {
   
     const generateAIInsight = () => {
     if (loading) return 'กำลังโหลดและวิเคราะห์ข้อมูล...';
-    if (!processed || !processed.totals) return 'ยังไม่มีข้อมูลสำหรับการวิเคราะห์';
+    if (!processed || !processed.totals || !overallFinancials) return 'ยังไม่มีข้อมูลสำหรับการวิเคราะห์';
+    
+    if (processed.totals.actual === 0) {
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', width: '100%', padding: '1rem', background: 'rgba(255,255,255,0.05)', borderRadius: '8px', border: '1px dashed var(--glass-border)' }}>
+          <p style={{ margin: 0, textAlign: 'center', color: 'var(--text-secondary)' }}>
+            ไม่พบข้อมูลผลงานในเงื่อนไขการกรอง (Filter) ปัจจุบัน<br/>กรุณาปรับเปลี่ยนเงื่อนไขเพื่อดูผลการวิเคราะห์
+          </p>
+        </div>
+      );
+    }
+
+    const actStr = formatAmt(processed.totals.actual);
+    const typeStr = isIncome ? "รายได้" : "ค่าใช้จ่าย";
     const pct = processed.totals.target > 0 ? (processed.totals.actual / processed.totals.target) * 100 : 0;
     
-    const typeStr = isIncome ? "รายได้" : "ค่าใช้จ่าย";
-    const statusStr = isIncome 
-      ? (pct >= 100 ? "ทะลุเป้าหมายได้อย่างยอดเยี่ยม" : (pct >= 80 ? "อยู่ในเกณฑ์ที่ดีแต่ยังต้องผลักดันอีกเล็กน้อย" : "ยังต่ำกว่าเป้าหมายที่ควรจะเป็นพอสมควร")) 
-      : (pct <= 100 ? "สามารถควบคุมได้ดีเยี่ยม" : (pct <= 110 ? "เริ่มสูงกว่าเป้าหมาย ต้องเฝ้าระวัง" : "เกินเป้าหมายที่ตั้งไว้ค่อนข้างมาก ให้ตรวจสอบเพื่อคุมรายจ่ายด่วน"));
+    // Highlight wrapper
+    const h = (text) => <b style={{color: themeColor, fontWeight: 700}}>{text}</b>;
+
+    // 1. Executive Summary Variables
+    const monthStr = selectedMonth.length > 0 ? selectedMonth.map(m => MONTH_NAMES[m - 1]).join(', ') : 'ทั้งปี';
+    const locStr = selectedOffice.length > 0 ? selectedOffice.join(', ') : (selectedProvince.length > 0 ? selectedProvince.join(', ') : 'ทั้งหมด');
+    
+    const profitStatus = overallFinancials.profit >= 0 ? 'กำไร' : 'ขาดทุน';
+    const profitAbs = Math.abs(overallFinancials.profit);
+    
+    // 2. Dynamic Drill-down Variables
+    // 2.1 Target Achievement
+    let statusStr = "";
+    if (isIncome) {
+      statusStr = pct >= 100 ? "บรรลุเป้าหมายอย่างยอดเยี่ยม" : (pct >= 80 ? "ทำได้ดีแต่อาจจะยังต่ำกว่าเป้าหมายเล็กน้อย" : "ต่ำกว่าเป้าหมายที่ควรจะเป็น");
+    } else {
+      statusStr = pct <= 100 ? "บริหารจัดการงบได้ดีเยี่ยม" : (pct <= 110 ? "อยู่ในเกณฑ์ที่เริ่มต้องเฝ้าระวัง" : "ใช้จ่ายเกินงบประมาณที่กำหนดไว้มาก");
+    }
+    const targetActionStr = isIncome ? "สามารถทำผลงานได้" : "มีการเบิกจ่ายใช้สอยไปแล้ว";
+    const targetTypeStr = isIncome ? "ของเป้าหมายที่ตั้งไว้" : "ของงบประมาณที่ตั้งไว้";
+
+    // 2.2 Key Drivers
+    let maxBGName = "ไม่มีข้อมูล";
+    let maxEVMName = "ไม่มีข้อมูล";
+    let maxBGPct = 0;
+
+    if (processed.hierarchicalData && processed.hierarchicalData.length > 0) {
+      const topBG = processed.hierarchicalData[0];
+      maxBGName = topBG.name;
+      maxBGPct = processed.totals.actual > 0 ? (topBG.actual / processed.totals.actual) * 100 : 0;
+      if (topBG.evms && topBG.evms.length > 0) {
+        maxEVMName = topBG.evms[0].name;
+      }
+    }
+    
+    let driversStr = null;
+    let totalEVMs = 0;
+    if (processed.hierarchicalData) {
+       processed.hierarchicalData.forEach(bg => totalEVMs += (bg.evms ? bg.evms.length : 0));
+    }
+    
+    if (totalEVMs === 1 || selectedEVM.length === 1) {
+        const singleEVMName = selectedEVM.length === 1 ? selectedEVM[0] : maxEVMName;
+        const evmPctStatus = pct >= 100 ? "ที่น่าพอใจและเป็นบวก" : "ทิศทางที่ต้องผลักดันเพิ่ม";
+        driversStr = <>บริการหลักที่ขับเคลื่อนคือ {h(singleEVMName)} ซึ่งมีผลลัพธ์{evmPctStatus}เมื่อเทียบกับเป้าหมาย</>;
+    } else if (maxBGName !== "ไม่มีข้อมูล" && totalEVMs > 1) {
+        driversStr = <>กลุ่มธุรกิจที่ส่งผลกระทบต่อ{typeStr}มากที่สุดคือ {h(maxBGName)} โดยเฉพาะจากบริการ {h(maxEVMName)} ซึ่งคิดเป็นสัดส่วนถึง {h(maxBGPct.toFixed(1) + '%')} ของยอดรวมในหมวดนี้</>;
+    }
+
+    // 2.3 Location Insights
+    let locInsightStr = null;
+    if (processed.hierarchicalLocationData && processed.hierarchicalLocationData.length > 0) {
+      const provs = [...processed.hierarchicalLocationData];
+      let totalOffices = 0;
+      provs.forEach(p => totalOffices += (p.offices ? p.offices.length : 0));
       
-    let topProv = "ไม่มีข้อมูล";
-    if (processed.provinceAgg) {
-      const provsAll = Object.values(processed.provinceAgg).filter(p => p.actual > 0);
-      const provsWithTarget = provsAll.filter(p => p.target > 0);
-      if (provsWithTarget.length > 0) {
-        if (isIncome) provsWithTarget.sort((a,b) => (b.actual/b.target) - (a.actual/a.target));
-        else provsWithTarget.sort((a,b) => (a.actual/a.target) - (b.actual/b.target));
-        topProv = provsWithTarget[0].name;
-      } else if (provsAll.length > 0) {
-        // No target data yet — rank by actual 
-        provsAll.sort((a,b) => isIncome ? b.actual - a.actual : a.actual - b.actual);
-        topProv = provsAll[0].name;
+      if (totalOffices > 1 || provs.length > 1) {
+        provs.sort((a,b) => isIncome ? b.actual - a.actual : a.actual - b.actual);
+        const topProvName = provs[0].name;
+        const topOfficeName = provs[0].offices && provs[0].offices.length > 0 ? provs[0].offices[0].name : "";
+        let bestText = topOfficeName ? topOfficeName : `จังหวัด${topProvName}`;
+        
+        provs.sort((a,b) => {
+            const aGap = isIncome ? a.target - a.actual : a.actual - a.target;
+            const bGap = isIncome ? b.target - b.actual : b.actual - b.target;
+            return bGap - aGap; 
+        });
+        const worstProv = provs[0];
+        const worstOffName = worstProv.offices && worstProv.offices.length > 0 ? worstProv.offices[0].name : `จังหวัด${worstProv.name}`;
+
+        const topVerb = isIncome ? "รายได้สูงสุด" : "บริหารค่าใช้จ่ายได้ดีสุด";
+        const worstVerb = isIncome ? "ห่างจากเป้าหมาย" : "เกินเป้าหมาย";
+
+        if (bestText !== worstOffName) {
+           locInsightStr = <>หากพิจารณารายพื้นที่พบว่า {h(bestText)} เป็นสาขาที่ทำยอด{topVerb} ในขณะที่ {h(worstOffName)} เป็นพื้นที่ที่ตัวเลข{worstVerb}มากที่สุดในกลุ่มที่เลือก</>;
+        } else {
+           locInsightStr = <>ในด้านพื้นที่พบว่า {h(bestText)} เป็นแกนหลักของการสร้างผลงานในภาพรวมนี้</>;
+        }
+      } else if (totalOffices === 1) {
+        const onlyProv = provs[0];
+        const onlyOff = onlyProv.offices[0].name;
+        locInsightStr = <>ทั้งนี้ ผลงานทั้งหมดดังกล่าวมาจากพื้นที่ {h(onlyOff + ' (จ.' + onlyProv.name + ')')} เพียงแห่งเดียวตามเงื่อนไขที่เลือก</>;
       }
     }
 
-    let topBG = "ไม่มีข้อมูล";
-    if (processed.hierarchicalData && processed.hierarchicalData.length > 0) {
-      topBG = processed.hierarchicalData[0].name;
+    // 2.4 Trend
+    let trendStr = null;
+    const validMonths = processed.monthlyData.filter(m => m.actual > 0);
+    if ((selectedMonth.length > 1 || selectedMonth.length === 0) && validMonths.length > 1) {
+        const firstHalf = validMonths.slice(0, Math.floor(validMonths.length/2));
+        const secondHalf = validMonths.slice(Math.floor(validMonths.length/2));
+        const avgFirst = firstHalf.reduce((s, m) => s + m.actual, 0) / firstHalf.length;
+        const avgSecond = secondHalf.reduce((s, m) => s + m.actual, 0) / secondHalf.length;
+        
+        let direction = "";
+        if (avgSecond > avgFirst * 1.05) direction = "พุ่งสูงขึ้นอย่างต่อเนื่อง";
+        else if (avgSecond < avgFirst * 0.95) direction = "ลดลง";
+        else direction = "ค่อนข้างทรงตัวและผันผวน";
+
+        let maxMonth = validMonths[0];
+        validMonths.forEach(m => { if(m.actual > maxMonth.actual) maxMonth = m; });
+        
+        trendStr = <>จากข้อมูลสะสมพบว่าแนวโน้ม{typeStr}มีทิศทาง {h(direction)} โดยเดือน {h(maxMonth.name)} เป็นช่วงที่มียอดสูงที่สุด</>;
     }
 
-    const actStr = `${(processed.totals.actual / 1000000).toFixed(1)}M`;
-    return `ในภาพรวม ${typeStr}สะสมอยู่ที่ ${actStr} คิดเป็น ${pct.toFixed(1)}% ของเป้าหมาย ถือว่า${statusStr} โดยมีกลุ่มธุรกิจหลักที่ขับเคลื่อนคือ "${topBG}" และจังหวัดที่มีประสิทธิภาพเมื่อเปรียบเทียบกับเป้าหมายได้ดีที่สุดคือ "จังหวัด${topProv}"`;
+    // 3. Recommendations
+    let recStr = null;
+    if (isIncome && pct < 100) {
+      recStr = <>ควรมุ่งเน้นกระตุ้นยอดขายในกลุ่ม <b>{maxBGName}</b> โดยเฉพาะบริการ <b>{maxEVMName}</b> อาจพิจารณาจัดกิจกรรมส่งเสริมการขายเพิ่มเติมเพื่อดึงตัวเลขในเดือนถัดไปให้กลับมาออนแทร็ก</>;
+    } else if (isIncome && pct >= 100) {
+      recStr = <>ผลงานยอดเยี่ยม! ควรศึกษาความสำเร็จของการทำตลาดบริการ <b>{maxEVMName}</b> เพื่อนำไปเป็น Best Practice ขยายผลปรับใช้กับพื้นที่อื่นๆ</>;
+    } else if (!isIncome && pct > 100) {
+      recStr = <span style={{color: '#ef4444'}}>ต้องเฝ้าระวังอย่างเร่งด่วน! แนะนำให้ตรวจสอบรายละเอียดค่าใช้จ่ายในหมวด <b>{maxEVMName}</b> ว่ามีปัจจัยพิเศษใดเกิดขึ้นหรือไม่ เพื่อหาทางควบคุมต้นทุนในช่วงเวลาที่เหลือของปี</span>;
+    } else if (!isIncome && pct <= 100) {
+      recStr = <>บริหารจัดการงบประมาณได้ดีเยี่ยม ควรคงมาตรการควบคุมค่าใช้จ่ายในหมวด <b>{maxBGName}</b> ไว้ตามเดิม</>;
+    }
+
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem', width: '100%' }}>
+        <p style={{ margin: 0, fontSize: '0.98rem', borderBottom: '1px solid var(--line-color-faint)', paddingBottom: '0.8rem' }}>
+          ในภาพรวมของปี {h(selectedYear)} ช่วงเดือน {h(monthStr)} พื้นที่ {h(locStr)} มียอดสะสมรายได้รวม {h(formatAmt(overallFinancials.income))} และค่าใช้จ่ายรวม {h(formatAmt(overallFinancials.expense))} ส่งผลให้มี {h(profitStatus)} สุทธิอยู่ที่ {h(formatAmt(profitAbs))}
+        </p>
+        
+        <div style={{ margin: 0, paddingLeft: '1rem', borderLeft: `3px solid ${themeColor}`, display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+          <div>สำหรับหมวด{typeStr} {targetActionStr} {h(actStr)} คิดเป็น {h(pct.toFixed(1) + '%')} {targetTypeStr} ({h(statusStr)})</div>
+          {driversStr && <div>{driversStr}</div>}
+          {locInsightStr && <div>{locInsightStr}</div>}
+          {trendStr && <div>{trendStr}</div>}
+        </div>
+        
+        <div style={{ margin: 0, marginTop: '0.5rem', background: 'var(--bg-highlight)', padding: '0.8rem 1rem', borderRadius: '8px', border: '1px solid var(--glass-border)' }}>
+          💡 <span style={{fontWeight: 700}}>ข้อเสนอแนะเชิงกลยุทธ์:</span> <span style={{color: 'var(--text-secondary)'}}>{recStr}</span>
+        </div>
+      </div>
+    );
   };
 
-  // Toggle expansion blocks
+    // Toggle expansion blocks
   const toggleBG = (bgName) => setExpandedBGs(prev => ({ ...prev, [bgName]: !prev[bgName] }));
   const toggleProv = (provName) => setExpandedProvs(prev => ({ ...prev, [provName]: !prev[provName] }));
 
@@ -742,7 +877,36 @@ const Dashboard = () => {
     const el = document.querySelector('[data-panel-id="' + panelId + '"]');
     if (!el) return;
     try {
-      const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: theme === 'dark' ? '#09090b' : '#f8fafc', logging: false });
+      const now = new Date();
+      const timeStr = now.toLocaleDateString('th-TH') + ' เวลา ' + now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) + ' น.';
+      
+      const canvas = await html2canvas(el, { 
+        scale: 2, 
+        useCORS: true, 
+        backgroundColor: theme === 'dark' ? '#0a0a0a' : '#ffffff', 
+        logging: false,
+        onclone: (clonedDoc) => {
+          const clonedEl = clonedDoc.querySelector('[data-panel-id="' + panelId + '"]');
+          if (clonedEl) {
+            clonedEl.style.position = 'relative';
+            clonedEl.style.paddingBottom = '3.5rem';
+            
+            const watermark = clonedDoc.createElement('div');
+            watermark.style.cssText = 'position: absolute; bottom: 12px; right: 12px; font-size: 11px; color: ' + (theme === 'dark' ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.5)') + '; text-align: right; line-height: 1.5; font-family: Outfit, sans-serif; z-index: 999;';
+            watermark.innerHTML = "จัดทำโดย: ส่วนการตลาดและบริการลูกค้า สำนักงานไปรษณีย์เขต 6 (ทีม: ฮ.ฮูก ทีม)<br/>ข้อมูลที่ Capture ณ วันที่: " + timeStr;
+            clonedEl.appendChild(watermark);
+            
+            if (theme === 'light') {
+                const highlights = clonedEl.querySelectorAll('[style*="var(--bg-highlight)"]');
+                const psecs = clonedEl.querySelectorAll('[style*="var(--bg-panel-secondary)"]');
+                const glassBorder = clonedEl.querySelectorAll('[style*="var(--glass-border)"]');
+                highlights.forEach(n => n.style.background = '#f1f5f9');
+                psecs.forEach(n => n.style.background = '#f8fafc');
+                glassBorder.forEach(n => n.style.borderColor = 'rgba(0,0,0,0.1)');
+            }
+          }
+        }
+      });
       const link = document.createElement('a');
       link.download = filename;
       link.href = canvas.toDataURL('image/png', 1.0);
@@ -752,8 +916,28 @@ const Dashboard = () => {
 
   // Utility: export rows to xlsx
   const exportXLSX = (rows, filename) => {
+    const now = new Date();
+    const timeStr = now.toLocaleDateString('th-TH') + ' เวลา ' + now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) + ' น.';
+    
+    // Create an empty row spacer 
+    let spacer = {};
+    if (rows.length > 0) {
+      Object.keys(rows[0]).forEach(k => { spacer[k] = ''; });
+    }
+    
+    let firstKey = 'ข้อมูล';
+    if (Object.keys(spacer).length > 0) firstKey = Object.keys(spacer)[0];
+    
+    const metaCredit = Object.assign({}, spacer);
+    metaCredit[firstKey] = "จัดทำโดย: ส่วนการตลาดและบริการลูกค้า สำนักงานไปรษณีย์เขต 6 (ทีม: ฮ.ฮูก ทีม)";
+    
+    const metaDate = Object.assign({}, spacer);
+    metaDate[firstKey] = "ข้อมูล Export ณ วันที่: " + timeStr;
+
+    const enrichedRows = [...rows, spacer, metaCredit, metaDate];
+
     const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.json_to_sheet(rows);
+    const ws = XLSX.utils.json_to_sheet(enrichedRows);
     XLSX.utils.book_append_sheet(wb, ws, 'ข้อมูล');
     XLSX.writeFile(wb, filename);
   };
@@ -794,6 +978,20 @@ const Dashboard = () => {
       </div>
 
       <div ref={dashboardRef} style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', gap: '1rem', paddingBottom: '3rem' }}>
+      {maximizedPanel && theme === 'light' && (
+        <style>{`
+          div[data-panel-id="${maximizedPanel}"] { 
+            background: #ffffff !important; 
+            --bg-highlight: #f1f5f9;
+            --bg-panel-secondary: #f8fafc;
+            --glass-border: rgba(0,0,0,0.1);
+          }
+          div[data-panel-id="${maximizedPanel}"] button[title="แคปเจอร์เป็นภาพ"] {
+            background: rgba(0,0,0,0.05) !important;
+            border-color: rgba(0,0,0,0.15) !important;
+          }
+        `}</style>
+      )}
       
       {/* App Header w/ Tabs */}
       <div className="glass-panel" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem 1.5rem', borderRadius: '16px' }}>
@@ -869,9 +1067,9 @@ const Dashboard = () => {
                   <h3 style={{ fontSize: '1.15rem', fontWeight: '700', color: 'var(--text-primary)', margin: 0 }}>AI Daily Insights</h3>
                   <span style={{ fontSize: '0.75rem', background: 'rgba(255,255,255,0.15)', color: 'var(--text-secondary)', padding: '2px 8px', borderRadius: '12px', fontWeight: '500' }}>บทวิเคราะห์โดย AI</span>
                </div>
-               <p style={{ margin: 0, color: 'var(--text-primary)', lineHeight: '1.6', fontSize: '0.95rem' }}>
+               <div style={{ margin: 0, color: 'var(--text-primary)', lineHeight: '1.6', fontSize: '0.95rem', width: '100%' }}>
                  {generateAIInsight()}
-               </p>
+               </div>
             </div>
           </div>
 
