@@ -420,6 +420,26 @@ const Dashboard = () => {
     setAvailableEVMs(evms);
   }, [rawData, activeTab, selectedYear, selectedProvince, selectedOffice, selectedBG]);
 
+  const overallFinancials = useMemo(() => {
+    if (!rawData.length || !selectedYear) return { income: 0, expense: 0, profit: 0, incomeTarget: 0, expenseTarget: 0 };
+    
+    let base = rawData.filter(r => r.year === selectedYear);
+    const targetProvincesTh = Object.values(PROVINCE_MAP_EN_TH);
+    base = base.filter(r => targetProvincesTh.includes(r.province));
+    
+    if (selectedMonth.length > 0) base = base.filter(r => selectedMonth.includes(r.month));
+    if (selectedProvince.length > 0) base = base.filter(r => selectedProvince.includes(r.province));
+    if (selectedOffice.length > 0) base = base.filter(r => selectedOffice.includes(r.office));
+
+    let income = 0, expense = 0, incomeTarget = 0, expenseTarget = 0;
+    base.forEach(r => {
+      if (r.category === 'รายได้') { income += r.actual; incomeTarget += r.target; }
+      else if (r.category === 'ค่าใช้จ่าย') { expense += r.actual; expenseTarget += r.target; }
+    });
+
+    return { income, expense, profit: income - expense, incomeTarget, expenseTarget };
+  }, [rawData, selectedYear, selectedMonth, selectedProvince, selectedOffice]);
+
   const processed = useMemo(() => {
         if (!rawData.length || !selectedYear) return { 
       totals: {actual: 0, target: 0, prev: 0}, 
@@ -442,6 +462,17 @@ const Dashboard = () => {
     const targetCategory = activeTab === 'income' ? 'รายได้' : 'ค่าใช้จ่าย';
     const tabFiltered = filtered.filter(r => r.category === targetCategory);
 
+    // To calculate MoM accurately, we need previous month's data regardless of `selectedMonth` filter
+    const latestMonth = selectedMonth.length > 0 ? Math.max(...selectedMonth) : 12;
+    const prevMonth = latestMonth - 1;
+
+    // Filter rawData to get previous month actuals (bypass some filters for MoM comparison if needed, but respect others)
+    let preFiltered = rawData.filter(r => r.year === selectedYear && targetProvincesTh.includes(r.province) && r.category === targetCategory);
+    if (selectedBG.length > 0) preFiltered = preFiltered.filter(r => selectedBG.includes(r.businessGroup));
+    if (selectedEVM.length > 0) preFiltered = preFiltered.filter(r => selectedEVM.includes(r.evmService));
+    if (selectedProvince.length > 0) preFiltered = preFiltered.filter(r => selectedProvince.includes(r.province));
+    if (selectedOffice.length > 0) preFiltered = preFiltered.filter(r => selectedOffice.includes(r.office));
+
     let tabActual = 0, tabTarget = 0, tabPrev = 0;
     const monthlyMap = Array.from({ length: 12 }, (_, i) => ({
       name: MONTH_NAMES[i], actual: 0, target: 0, prev: 0
@@ -461,14 +492,14 @@ const Dashboard = () => {
       }
 
       const bg = row.businessGroup || 'อื่นๆ';
-      if (!bgMap[bg]) bgMap[bg] = { name: bg.substring(0,35), rawName: bg, actual: 0, target: 0, prev: 0 };
+      if (!bgMap[bg]) bgMap[bg] = { name: bg.substring(0,35), rawName: bg, actual: 0, target: 0, prev: 0, currMoActual: 0, prevMoActual: 0 };
       bgMap[bg].actual += row.actual;
       bgMap[bg].target += row.target;
       bgMap[bg].prev += row.prevActual;
 
       const evm = row.evmService || 'ไม่ระบุ EVM';
       if (!bgToEvmMap[bg]) bgToEvmMap[bg] = {};
-      if (!bgToEvmMap[bg][evm]) bgToEvmMap[bg][evm] = { name: evm, actual: 0, target: 0, prev: 0 };
+      if (!bgToEvmMap[bg][evm]) bgToEvmMap[bg][evm] = { name: evm, actual: 0, target: 0, prev: 0, currMoActual: 0, prevMoActual: 0 };
       bgToEvmMap[bg][evm].actual += row.actual;
       bgToEvmMap[bg][evm].target += row.target;
       bgToEvmMap[bg][evm].prev += row.prevActual;
@@ -476,13 +507,38 @@ const Dashboard = () => {
       const provKey = row.province;
       const officeKey = row.office || 'ไม่ระบุที่ทำการ';
       if (provKey) {
-         if (!locationMap[provKey]) locationMap[provKey] = { name: provKey, actual: 0, target: 0, offices: {} };
+         if (!locationMap[provKey]) locationMap[provKey] = { name: provKey, actual: 0, target: 0, prev: 0, currMoActual: 0, prevMoActual: 0, offices: {} };
          locationMap[provKey].actual += row.actual;
          locationMap[provKey].target += row.target;
+         locationMap[provKey].prev += row.prevActual;
          
-         if (!locationMap[provKey].offices[officeKey]) locationMap[provKey].offices[officeKey] = { name: officeKey, actual: 0, target: 0 };
+         if (!locationMap[provKey].offices[officeKey]) locationMap[provKey].offices[officeKey] = { name: officeKey, actual: 0, target: 0, prev: 0, currMoActual: 0, prevMoActual: 0 };
          locationMap[provKey].offices[officeKey].actual += row.actual;
          locationMap[provKey].offices[officeKey].target += row.target;
+         locationMap[provKey].offices[officeKey].prev += row.prevActual;
+      }
+    });
+
+    preFiltered.forEach(row => {
+      const bg = row.businessGroup || 'อื่นๆ';
+      const evm = row.evmService || 'ไม่ระบุ EVM';
+      const provKey = row.province;
+      const officeKey = row.office || 'ไม่ระบุที่ทำการ';
+
+      if (row.month === latestMonth) {
+        if (bgMap[bg]) bgMap[bg].currMoActual += row.actual;
+        if (bgToEvmMap[bg] && bgToEvmMap[bg][evm]) bgToEvmMap[bg][evm].currMoActual += row.actual;
+        if (provKey && locationMap[provKey]) {
+          locationMap[provKey].currMoActual += row.actual;
+          if (locationMap[provKey].offices[officeKey]) locationMap[provKey].offices[officeKey].currMoActual += row.actual;
+        }
+      } else if (row.month === prevMonth) {
+        if (bgMap[bg]) bgMap[bg].prevMoActual += row.actual;
+        if (bgToEvmMap[bg] && bgToEvmMap[bg][evm]) bgToEvmMap[bg][evm].prevMoActual += row.actual;
+        if (provKey && locationMap[provKey]) {
+          locationMap[provKey].prevMoActual += row.actual;
+          if (locationMap[provKey].offices[officeKey]) locationMap[provKey].offices[officeKey].prevMoActual += row.actual;
+        }
       }
     });
 
@@ -555,6 +611,55 @@ const Dashboard = () => {
   // Toggle expansion blocks
   const toggleBG = (bgName) => setExpandedBGs(prev => ({ ...prev, [bgName]: !prev[bgName] }));
   const toggleProv = (provName) => setExpandedProvs(prev => ({ ...prev, [provName]: !prev[provName] }));
+
+  // --- PHASE 2 STATE: Watchlist & Sorting ---
+  const [watchlistTab, setWatchlistTab] = React.useState('target');
+  const [expandedWatchlistProvs, setExpandedWatchlistProvs] = React.useState({});
+  const [sortConfigBG, setSortConfigBG] = React.useState({ key: 'name', dir: 'asc' });
+  const [sortConfigLoc, setSortConfigLoc] = React.useState({ key: 'name', dir: 'asc' });
+
+  const handleSortBG = (key) => setSortConfigBG(p => ({ key, dir: p.key === key && p.dir === 'asc' ? 'desc' : 'asc' }));
+  const handleSortLoc = (key) => setSortConfigLoc(p => ({ key, dir: p.key === key && p.dir === 'asc' ? 'desc' : 'asc' }));
+
+  const getSortedData = (data, config) => {
+    return [...data].sort((a, b) => {
+      let valA = 0, valB = 0;
+      if (config.key === 'name') return config.dir === 'asc' ? a.name.localeCompare(b.name, 'th') : b.name.localeCompare(a.name, 'th');
+      if (config.key === 'actual') { valA = a.actual; valB = b.actual; }
+      else if (config.key === 'pct') { valA = a.target > 0 ? a.actual / a.target : 0; valB = b.target > 0 ? b.actual / b.target : 0; }
+      else if (config.key === 'yoy') { valA = a.prev > 0 ? (a.actual - a.prev) / a.prev : -999; valB = b.prev > 0 ? (b.actual - b.prev) / b.prev : -999; }
+      else if (config.key === 'mom') { valA = a.prevMoActual > 0 ? (a.currMoActual - a.prevMoActual) / a.prevMoActual : -999; valB = b.prevMoActual > 0 ? (b.currMoActual - b.prevMoActual) / b.prevMoActual : -999; }
+      return config.dir === 'asc' ? valA - valB : valB - valA;
+    });
+  };
+
+  const getWatchlistLevel = React.useCallback((item) => {
+    if (watchlistTab === 'target') {
+      const pct = item.target > 0 ? (item.actual / item.target) * 100 : 0;
+      if (pct < 70) return { label: 'ติดตามเร่งด่วน', sub: '(< 70%)', val: pct, c: '#ef4444' };
+      if (pct < 90) return { label: 'เฝ้าระวัง ติดตามอย่างใกล้ชิด', sub: '(70% - 89.9%)', val: pct, c: '#f97316' };
+      if (pct < 100) return { label: 'กลุ่มเสริมทัพเร่งบูรณาการ', sub: '(90% - 99.9%)', val: pct, c: '#facc15' };
+      return null;
+    } else {
+      const yoy = item.prev > 0 ? ((item.actual - item.prev) / item.prev) * 100 : 0;
+      if (yoy <= -30) return { label: 'ติดตามเร่งด่วน', sub: '(YoY ลดลง >= 30%)', val: yoy, c: '#ef4444' };
+      if (yoy <= -10) return { label: 'เฝ้าระวัง ติดตามอย่างใกล้ชิด', sub: '(YoY ลดลง 10% ถึง 29.9%)', val: yoy, c: '#f97316' };
+      if (yoy < 0) return { label: 'กลุ่มเสริมทัพเร่งบูรณาการ', sub: '(YoY ลดลง < 10%)', val: yoy, c: '#facc15' };
+      return null;
+    }
+  }, [watchlistTab]);
+
+  const watchlistData = useMemo(() => {
+    if (!processed || !processed.hierarchicalLocationData) return [];
+    return processed.hierarchicalLocationData.map(prov => {
+      const matchingOffices = prov.offices
+        .map(o => ({ ...o, watchStatus: getWatchlistLevel(o) }))
+        .filter(o => o.watchStatus !== null);
+      return { ...prov, watchStatus: getWatchlistLevel(prov), matchingOffices };
+    }).filter(prov => prov.watchStatus !== null || prov.matchingOffices.length > 0);
+  }, [processed, watchlistTab, getWatchlistLevel]);
+
+  const toggleWatchlistProv = (provName) => setExpandedWatchlistProvs(prev => ({ ...prev, [provName]: !prev[provName] }));
 
   const getProvinceStyle = (feature) => {
     if (!processed) return { fillColor: theme === 'light' ? '#e2e8f0' : '#333', weight: 1, opacity: 1, color: '#000', fillOpacity: 0.7 };
@@ -770,6 +875,21 @@ const Dashboard = () => {
             </div>
           </div>
 
+          <div className="glass-panel" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem', padding: '1.25rem', borderRadius: '16px' }}>
+             <div style={{ background: 'rgba(45,212,191,0.1)', padding: '1rem', borderRadius: '12px', border: '1px solid rgba(45,212,191,0.2)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#2dd4bf', fontSize: '0.9rem', marginBottom: '0.5rem', fontWeight: '600' }}><TrendingUp size={16}/> รายได้รวมทั้งหมด</div>
+                <div style={{ fontSize: '1.75rem', fontWeight: '700', color: 'var(--text-primary)' }}>{formatFullAmt(overallFinancials.income)}</div>
+             </div>
+             <div style={{ background: 'rgba(244,63,94,0.1)', padding: '1rem', borderRadius: '12px', border: '1px solid rgba(244,63,94,0.2)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#fb7185', fontSize: '0.9rem', marginBottom: '0.5rem', fontWeight: '600' }}><TrendingDown size={16}/> ค่าใช้จ่ายรวมทั้งหมด</div>
+                <div style={{ fontSize: '1.75rem', fontWeight: '700', color: 'var(--text-primary)' }}>{formatFullAmt(overallFinancials.expense)}</div>
+             </div>
+             <div style={{ background: 'rgba(56,189,248,0.1)', padding: '1rem', borderRadius: '12px', border: '1px solid rgba(56,189,248,0.2)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#38bdf8', fontSize: '0.9rem', marginBottom: '0.5rem', fontWeight: '600' }}><DollarSign size={16}/> กำไร (รายได้ - ค่าใช้จ่าย)</div>
+                <div style={{ fontSize: '1.75rem', fontWeight: '700', color: overallFinancials.profit >= 0 ? '#10b981' : '#ef4444' }}>{overallFinancials.profit >= 0 ? '+' : ''}{formatFullAmt(overallFinancials.profit)}</div>
+             </div>
+          </div>
+
           <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
           
           {/* LEFT SIDEBAR (Fixed Width) */}
@@ -855,61 +975,104 @@ const Dashboard = () => {
           {/* MAIN CONTENT AREA */}
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '1rem', minWidth: '600px' }}>
             
-            {/* Top Filter Bar */}
-            <div className="glass-panel" style={{ padding: '0.75rem 1.25rem', display: 'flex', gap: '1.25rem', alignItems: 'center', flexWrap: 'wrap', borderRadius: '16px', position: 'relative', zIndex: 100 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <span style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>ปี พ.ศ.</span>
-                <select value={selectedYear} onChange={e => setSelectedYear(parseInt(e.target.value))} className="filter-select">
-                  {availableYears.map(y => <option key={y} value={y}>{y}</option>)}
-                </select>
+            {/* Top Filter Bar - Chip Based */}
+            <div className="glass-panel" style={{ padding: '0.85rem 1.25rem', display: 'flex', flexDirection: 'column', gap: '0.65rem', borderRadius: '16px', position: 'relative', zIndex: 100 }}>
+              
+              {/* Row 1: Dropdowns */}
+              <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                {/* Year */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                  <span style={{ color: 'var(--text-secondary)', fontSize: '0.82rem', whiteSpace: 'nowrap' }}>ปี พ.ศ.</span>
+                  <select value={selectedYear} onChange={e => setSelectedYear(parseInt(e.target.value))} className="filter-select" style={{ minWidth: '80px' }}>
+                    {availableYears.map(y => <option key={y} value={y}>{y}</option>)}
+                  </select>
+                </div>
+
+                <div style={{ width: '1px', height: '18px', background: 'var(--line-color)' }}></div>
+
+                {/* Month picker */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                  <span style={{ color: 'var(--text-secondary)', fontSize: '0.82rem', whiteSpace: 'nowrap' }}>เดือน</span>
+                  <MultiSelect selected={selectedMonth} onChange={setSelectedMonth} options={MONTH_NAMES.map((m,i)=>({label:m, value:i+1}))} />
+                </div>
+
+                <div style={{ width: '1px', height: '18px', background: 'var(--line-color)' }}></div>
+
+                {/* Province picker */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                  <span style={{ color: 'var(--text-secondary)', fontSize: '0.82rem', whiteSpace: 'nowrap' }}>จังหวัด</span>
+                  <MultiSelect selected={selectedProvince} onChange={setSelectedProvince} options={availableProvinces.map(p=>({label:p, value:p}))} />
+                </div>
+
+                {selectedProvince.length > 0 && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                    <span style={{ color: 'var(--text-secondary)', fontSize: '0.82rem', whiteSpace: 'nowrap' }}>ที่ทำการ</span>
+                    <MultiSelect selected={selectedOffice} onChange={setSelectedOffice} options={availableOffices.map(o=>({label:o, value:o}))} />
+                  </div>
+                )}
+
+                <div style={{ width: '1px', height: '18px', background: 'var(--line-color)' }}></div>
+
+                {/* BG picker */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                  <span style={{ color: 'var(--text-secondary)', fontSize: '0.82rem', whiteSpace: 'nowrap' }}>กลุ่มธุรกิจ</span>
+                  <MultiSelect selected={selectedBG} onChange={setSelectedBG} options={availableBGs.map(b=>({label:b, value:b}))} style={{ minWidth: '150px' }} />
+                </div>
+
+                {/* EVM picker */}
+                {selectedBG.length > 0 && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                    <span style={{ color: 'var(--text-secondary)', fontSize: '0.82rem', whiteSpace: 'nowrap' }}>EVM</span>
+                    <MultiSelect selected={selectedEVM} onChange={setSelectedEVM} options={availableEVMs.map(e=>({label:e, value:e}))} style={{ minWidth: '150px' }} />
+                  </div>
+                )}
+
+                <button
+                  onClick={handleResetFilters}
+                  style={{ marginLeft: 'auto', padding: '0.4rem 0.85rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem', background: 'rgba(251,113,133,0.15)', border: '1px solid rgba(251,113,133,0.35)', color: '#fb7185', borderRadius: '10px', cursor: 'pointer', fontFamily: 'Outfit', fontWeight: '600', fontSize: '0.82rem', transition: 'all 0.2s', whiteSpace: 'nowrap' }}
+                  onMouseOver={(e) => { e.currentTarget.style.background = 'rgba(251,113,133,0.25)'; }}
+                  onMouseOut={(e) => { e.currentTarget.style.background = 'rgba(251,113,133,0.15)'; }}
+                >
+                  <Filter size={13} /> รีเซ็ต
+                </button>
               </div>
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <span style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>เดือน</span>
-                <MultiSelect selected={selectedMonth} onChange={setSelectedMonth} options={MONTH_NAMES.map((m,i)=>({label:m, value:i+1}))} />
-              </div>
-
-              <div style={{ width: '1px', height: '20px', background: 'var(--line-color)' }}></div>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <span style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>พื้นที่</span>
-                <MultiSelect selected={selectedProvince} onChange={setSelectedProvince} options={availableProvinces.map(p=>({label:p, value:p}))} />
-                <MultiSelect selected={selectedOffice} onChange={setSelectedOffice} options={availableOffices.map(o=>({label:o, value:o}))} disabled={selectedProvince.length !== 1} />
-              </div>
-
-              <div style={{ width: '1px', height: '20px', background: 'var(--line-color)' }}></div>
-
-              {/* Force line break — กลุ่มธุรกิจ + EVM Service go to row 2 */}
-              <div style={{ flexBasis: '100%', height: 0 }}></div>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <span style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>กลุ่มธุรกิจ</span>
-                <MultiSelect
-                  selected={selectedBG}
-                  onChange={setSelectedBG}
-                  options={availableBGs.map(b => ({ label: b, value: b }))}
-                  style={{ minWidth: '170px' }}
-                />
-              </div>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <span style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>EVM Service</span>
-                <MultiSelect
-                  selected={selectedEVM}
-                  onChange={setSelectedEVM}
-                  options={availableEVMs.map(e => ({ label: e, value: e }))}
-                  style={{ minWidth: '170px' }}
-                />
-              </div>
-
-              <button
-                onClick={handleResetFilters}
-                style={{ marginLeft: 'auto', padding: '0.5rem 1rem', display: 'inline-flex', alignItems: 'center', gap: '0.4rem', background: 'rgba(251,113,133,0.15)', border: '1px solid rgba(251,113,133,0.35)', color: '#fb7185', borderRadius: '10px', cursor: 'pointer', fontFamily: 'Outfit', fontWeight: '600', fontSize: '0.875rem', transition: 'all 0.2s' }}
-                onMouseOver={(e) => { e.currentTarget.style.background = 'rgba(251,113,133,0.25)'; }}
-                onMouseOut={(e) => { e.currentTarget.style.background = 'rgba(251,113,133,0.15)'; }}
-              >
-                <Filter size={14} /> รีเซ็ตฟิลเตอร์
-              </button>
+              {/* Row 2: Active filter chips */}
+              {(selectedMonth.length > 0 || selectedProvince.length > 0 || selectedOffice.length > 0 || selectedBG.length > 0 || selectedEVM.length > 0) && (
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center', borderTop: '1px solid var(--line-color-faint)', paddingTop: '0.55rem' }}>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', flexShrink: 0 }}>ฟิลเตอร์ที่เลือก:</span>
+                  {selectedMonth.map(m => (
+                    <span key={'m-'+m} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', padding: '0.2rem 0.6rem', background: 'rgba(99,102,241,0.15)', border: '1px solid rgba(99,102,241,0.4)', borderRadius: '20px', fontSize: '0.78rem', color: '#a5b4fc', fontWeight: '500', flexShrink: 0 }}>
+                      📅 {MONTH_NAMES[m-1]}
+                      <button onClick={() => setSelectedMonth(prev => prev.filter(x => x !== m))} style={{ background:'none', border:'none', cursor:'pointer', color:'rgba(165,180,252,0.6)', display:'flex', padding:'0', margin:0, lineHeight:1, fontSize:'0.85rem' }}>✕</button>
+                    </span>
+                  ))}
+                  {selectedProvince.map(p => (
+                    <span key={'p-'+p} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', padding: '0.2rem 0.6rem', background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.4)', borderRadius: '20px', fontSize: '0.78rem', color: '#6ee7b7', fontWeight: '500', flexShrink: 0 }}>
+                      📍 {p}
+                      <button onClick={() => setSelectedProvince(prev => prev.filter(x => x !== p))} style={{ background:'none', border:'none', cursor:'pointer', color:'rgba(110,231,183,0.6)', display:'flex', padding:'0', margin:0, lineHeight:1, fontSize:'0.85rem' }}>✕</button>
+                    </span>
+                  ))}
+                  {selectedOffice.map(o => (
+                    <span key={'o-'+o} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', padding: '0.2rem 0.6rem', background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: '20px', fontSize: '0.78rem', color: '#6ee7b7', fontWeight: '500', flexShrink: 0 }}>
+                      🏢 {o}
+                      <button onClick={() => setSelectedOffice(prev => prev.filter(x => x !== o))} style={{ background:'none', border:'none', cursor:'pointer', color:'rgba(110,231,183,0.6)', display:'flex', padding:'0', margin:0, lineHeight:1, fontSize:'0.85rem' }}>✕</button>
+                    </span>
+                  ))}
+                  {selectedBG.map(b => (
+                    <span key={'b-'+b} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', padding: '0.2rem 0.6rem', background: 'rgba(245,158,11,0.15)', border: '1px solid rgba(245,158,11,0.4)', borderRadius: '20px', fontSize: '0.78rem', color: '#fcd34d', fontWeight: '500', flexShrink: 0 }}>
+                      📦 {b.length > 20 ? b.substring(0, 19) + '…' : b}
+                      <button onClick={() => setSelectedBG(prev => prev.filter(x => x !== b))} style={{ background:'none', border:'none', cursor:'pointer', color:'rgba(252,211,77,0.6)', display:'flex', padding:'0', margin:0, lineHeight:1, fontSize:'0.85rem' }}>✕</button>
+                    </span>
+                  ))}
+                  {selectedEVM.map(e => (
+                    <span key={'e-'+e} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', padding: '0.2rem 0.6rem', background: 'rgba(139,92,246,0.15)', border: '1px solid rgba(139,92,246,0.4)', borderRadius: '20px', fontSize: '0.78rem', color: '#c4b5fd', fontWeight: '500', flexShrink: 0 }}>
+                      ⚙️ {e.length > 22 ? e.substring(0, 21) + '…' : e}
+                      <button onClick={() => setSelectedEVM(prev => prev.filter(x => x !== e))} style={{ background:'none', border:'none', cursor:'pointer', color:'rgba(196,181,253,0.6)', display:'flex', padding:'0', margin:0, lineHeight:1, fontSize:'0.85rem' }}>✕</button>
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Monthly Trend Chart */}
@@ -978,26 +1141,45 @@ const Dashboard = () => {
                        </div>
                     </div>
 
-                    <div style={{ display: 'flex', gap: '1rem', padding: '0.75rem 1rem', borderBottom: '1px solid var(--line-color)', fontWeight: '600', color: 'var(--text-secondary)', fontSize: '0.8rem', flexShrink: 0 }}>
-                        <div style={{ flex: 2.5 }}>กลุ่มธุรกิจ / บริการ</div>
-                        <div style={{ flex: 1, textAlign: 'right' }}>ผลงานจริง</div>
-                        <div style={{ flex: 1, textAlign: 'right' }}>% สำเร็จ</div>
+                    {true && (
+                       <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '1rem', padding: '0.4rem 0.8rem', background: 'var(--bg-panel-secondary)', borderRadius: '8px', alignItems: 'center' }}>
+                          <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>ฟิลเตอร์ที่ใช้งาน: </span>
+                          <span style={{ fontSize: '0.72rem', background: 'var(--glass-border)', padding: '2px 8px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)', color: 'var(--text-primary)' }}>ปี: {selectedYear}</span>
+                          {selectedMonth.length > 0 && <span style={{ fontSize: '0.72rem', background: 'var(--glass-border)', padding: '2px 8px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)', color: 'var(--text-primary)' }}>เดือน: {selectedMonth.map(m => MONTH_NAMES[m-1]).join(', ')}</span>}
+                          {selectedProvince.length > 0 && <span style={{ fontSize: '0.72rem', background: 'var(--glass-border)', padding: '2px 8px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)', color: 'var(--text-primary)' }}>จังหวัด: {selectedProvince.join(', ')}</span>}
+                          {selectedOffice.length > 0 && <span style={{ fontSize: '0.72rem', background: 'var(--glass-border)', padding: '2px 8px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)', color: 'var(--text-primary)' }}>ที่ทำการ: {selectedOffice.join(', ')}</span>}
+                          {selectedBG.length > 0 && <span style={{ fontSize: '0.72rem', background: 'var(--glass-border)', padding: '2px 8px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)', color: 'var(--text-primary)' }}>กลุ่มธุรกิจ: {selectedBG.join(', ')}</span>}
+                          {selectedEVM.length > 0 && <span style={{ fontSize: '0.72rem', background: 'var(--glass-border)', padding: '2px 8px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)', color: 'var(--text-primary)' }}>EVM: {selectedEVM.join(', ')}</span>}
+                       </div>
+                    )}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 2.5fr) 1fr 0.8fr 1fr 1fr', padding: '0.6rem 1rem', borderBottom: '1px solid var(--line-color)', fontWeight: '600', color: 'var(--text-secondary)', fontSize: '0.78rem', flexShrink: 0, cursor: 'pointer' }}>
+                        <div onClick={() => handleSortBG('name')}>กลุ่มธุรกิจ / บริการ {sortConfigBG.key === 'name' ? (sortConfigBG.dir === 'asc' ? '↑' : '↓') : '⇅'}</div>
+                        <div style={{ textAlign: 'right' }} onClick={() => handleSortBG('actual')}>ผลงานจริง {sortConfigBG.key === 'actual' ? (sortConfigBG.dir === 'asc' ? '↑' : '↓') : '⇅'}</div>
+                        <div style={{ textAlign: 'right' }} onClick={() => handleSortBG('pct')}>%สำเร็จ {sortConfigBG.key === 'pct' ? (sortConfigBG.dir === 'asc' ? '↑' : '↓') : '⇅'}</div>
+                        <div style={{ textAlign: 'right', color: '#38bdf8' }} onClick={() => handleSortBG('yoy')}>%YoY {sortConfigBG.key === 'yoy' ? (sortConfigBG.dir === 'asc' ? '↑' : '↓') : '⇅'}</div>
+                        <div style={{ textAlign: 'right', color: '#a78bfa' }} onClick={() => handleSortBG('mom')}>%MoM {sortConfigBG.key === 'mom' ? (sortConfigBG.dir === 'asc' ? '↑' : '↓') : '⇅'}</div>
                     </div>
 
                     <div style={{ display: 'block', marginTop: '0.5rem', overflowX: 'hidden', overflowY: 'visible' }}>
-                        {processed.hierarchicalData.map((bg, idx) => {
+                        {getSortedData(processed.hierarchicalData.map(bg => ({ ...bg, evms: getSortedData(bg.evms, sortConfigBG) })), sortConfigBG).map((bg, idx) => {
                            const isExpanded = !!expandedBGs[bg.name];
                            const pct = bg.target > 0 ? (bg.actual / bg.target) * 100 : 0;
                            
                            return (
                              <div key={idx} style={{ background: 'var(--bg-highlight)', borderRadius: '8px', overflow: 'hidden' }}>
-                               <div onClick={() => toggleBG(bg.name)} style={{ display: 'flex', gap: '1rem', padding: '1rem', cursor: 'pointer', alignItems: 'center' }} className="hover:bg-white/5 transition-colors">
-                                  <div style={{ flex: 2.5, display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: '600', color: 'var(--text-primary)', fontSize: '0.95rem' }}>
+                               <div onClick={() => toggleBG(bg.name)} style={{ display: 'grid', gridTemplateColumns: 'minmax(120px, 2.5fr) 1fr 0.8fr 1fr 1fr', gap: '0.5rem', padding: '1rem', cursor: 'pointer', alignItems: 'center' }} className="hover:bg-white/5 transition-colors">
+                                  <div style={{ display: 'flex', overflow: 'hidden', alignItems: 'center', gap: '0.5rem', fontWeight: '600', color: 'var(--text-primary)', fontSize: '0.95rem' }}>
                                      {isExpanded ? <ChevronDown size={18} color={themeColor} /> : <ChevronRight size={18} color="var(--text-secondary)" />}
                                      <span title={bg.name} style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: maximizedPanel === 'drillBG' ? 'none' : '180px' }}>{bg.name}</span>
                                   </div>
-                                  <div style={{ flex: 1, textAlign: 'right', fontWeight: 'bold' }}><span title={bg.actual.toLocaleString()}>{formatAmt(bg.actual)}</span></div>
-                                  <div style={{ flex: 1, textAlign: 'right', fontWeight: 'bold', color: getPerfColor(bg.actual, bg.target) }}>{pct.toFixed(0)}%</div>
+                                  <div style={{ textAlign: 'right', fontWeight: 'bold' }}><span title={bg.actual.toLocaleString()}>{formatAmt(bg.actual)}</span></div>
+                                  <div style={{ textAlign: 'right', fontWeight: 'bold', color: getPerfColor(bg.actual, bg.target) }}>{pct.toFixed(0)}%</div>
+                                  <div style={{ textAlign: 'right', fontWeight: 'bold', color: bg.prev > 0 && (((bg.actual - bg.prev)/bg.prev)*100) >= 0 ? '#10b981' : '#ef4444' }}>
+                                    {bg.prev > 0 ? (((bg.actual - bg.prev)/bg.prev)*100).toFixed(1) + '%' : 'N/A'}
+                                  </div>
+                                  <div style={{ textAlign: 'right', fontWeight: 'bold', color: bg.prevMoActual > 0 && (((bg.currMoActual - bg.prevMoActual)/bg.prevMoActual)*100) >= 0 ? '#10b981' : '#ef4444' }}>
+                                    {bg.prevMoActual > 0 ? (((bg.currMoActual - bg.prevMoActual)/bg.prevMoActual)*100).toFixed(1) + '%' : 'N/A'}
+                                  </div>
                                </div>
 
                                {isExpanded && (
@@ -1005,13 +1187,19 @@ const Dashboard = () => {
                                    {bg.evms.map((evm, eidx) => {
                                       let evmPct = evm.target > 0 ? (evm.actual / evm.target) * 100 : 0;
                                       return (
-                                         <div key={eidx} style={{ display: 'flex', gap: '0.5rem', padding: '0.5rem 1rem 0.5rem 2.5rem', fontSize: '0.85rem', alignItems: 'center', borderBottom: eidx !== bg.evms.length - 1 ? '1px solid var(--line-color-faint)' : 'none' }}>
-                                            <div style={{ flex: 2.5, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center' }}>
+                                         <div key={eidx} style={{ display: 'grid', gridTemplateColumns: 'minmax(120px, 2.5fr) 1fr 0.8fr 1fr 1fr', gap: '0.5rem', padding: '0.5rem 1rem 0.5rem 2.5rem', fontSize: '0.85rem', alignItems: 'center', borderBottom: eidx !== bg.evms.length - 1 ? '1px solid var(--line-color-faint)' : 'none' }}>
+                                            <div style={{ display: 'flex', overflow: 'hidden', color: 'var(--text-secondary)', alignItems: 'center' }}>
                                               <span style={{ display: 'inline-block', width: '4px', height: '4px', borderRadius: '50%', background: 'var(--text-secondary)', marginRight: '0.5rem' }}></span>
                                               <span title={evm.name} style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: maximizedPanel === 'drillBG' ? 'none' : '160px' }}>{evm.name}</span>
                                             </div>
-                                            <div style={{ flex: 1, textAlign: 'right', color: 'var(--text-secondary)' }}>{formatFullAmt(evm.actual)}</div>
-                                            <div style={{ flex: 1, textAlign: 'right', color: getPerfColor(evm.actual, evm.target) }}>{evmPct.toFixed(0)}%</div>
+                                            <div style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>{formatFullAmt(evm.actual)}</div>
+                                            <div style={{ textAlign: 'right', color: getPerfColor(evm.actual, evm.target) }}>{evmPct.toFixed(0)}%</div>
+                                            <div style={{ textAlign: 'right', color: evm.prev > 0 && (((evm.actual - evm.prev)/evm.prev)*100) >= 0 ? '#10b981' : '#ef4444' }}>
+                                              {evm.prev > 0 ? (((evm.actual - evm.prev)/evm.prev)*100).toFixed(1) + '%' : 'N/A'}
+                                            </div>
+                                            <div style={{ textAlign: 'right', color: evm.prevMoActual > 0 && (((evm.currMoActual - evm.prevMoActual)/evm.prevMoActual)*100) >= 0 ? '#10b981' : '#ef4444' }}>
+                                              {evm.prevMoActual > 0 ? (((evm.currMoActual - evm.prevMoActual)/evm.prevMoActual)*100).toFixed(1) + '%' : 'N/A'}
+                                            </div>
                                          </div>
                                       )
                                    })}
@@ -1039,29 +1227,42 @@ const Dashboard = () => {
                        </div>
                     </div>
 
-                    <div style={{ display: 'flex', gap: '0.5rem', padding: '0.75rem 1rem', borderBottom: '1px solid var(--line-color)', fontWeight: '600', color: 'var(--text-secondary)', fontSize: '0.8rem', flexShrink: 0 }}>
-                        <div style={{ flex: 2.2 }}>จังหวัด / ที่ทำการ</div>
-                        <div style={{ flex: 0.8, textAlign: 'right' }}>ผลงานจริง</div>
-                        <div style={{ flex: 0.8, textAlign: 'right' }}>% สำเร็จ</div>
-                        <div style={{ flex: 1, textAlign: 'right' }}>สัดส่วนรวม</div>
+                    {true && (
+                       <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '1rem', padding: '0.4rem 0.8rem', background: 'var(--bg-panel-secondary)', borderRadius: '8px', alignItems: 'center' }}>
+                          <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>ฟิลเตอร์ที่ใช้งาน: </span>
+                          <span style={{ fontSize: '0.72rem', background: 'var(--glass-border)', padding: '2px 8px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)', color: 'var(--text-primary)' }}>ปี: {selectedYear}</span>
+                          {selectedMonth.length > 0 && <span style={{ fontSize: '0.72rem', background: 'var(--glass-border)', padding: '2px 8px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)', color: 'var(--text-primary)' }}>เดือน: {selectedMonth.map(m => MONTH_NAMES[m-1]).join(', ')}</span>}
+                          {selectedProvince.length > 0 && <span style={{ fontSize: '0.72rem', background: 'var(--glass-border)', padding: '2px 8px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)', color: 'var(--text-primary)' }}>จังหวัด: {selectedProvince.join(', ')}</span>}
+                          {selectedOffice.length > 0 && <span style={{ fontSize: '0.72rem', background: 'var(--glass-border)', padding: '2px 8px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)', color: 'var(--text-primary)' }}>ที่ทำการ: {selectedOffice.join(', ')}</span>}
+                          {selectedBG.length > 0 && <span style={{ fontSize: '0.72rem', background: 'var(--glass-border)', padding: '2px 8px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)', color: 'var(--text-primary)' }}>กลุ่มธุรกิจ: {selectedBG.join(', ')}</span>}
+                          {selectedEVM.length > 0 && <span style={{ fontSize: '0.72rem', background: 'var(--glass-border)', padding: '2px 8px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)', color: 'var(--text-primary)' }}>EVM: {selectedEVM.join(', ')}</span>}
+                       </div>
+                    )}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 2.2fr) 0.8fr 0.8fr 0.8fr 0.8fr', padding: '0.6rem 1rem', borderBottom: '1px solid var(--line-color)', fontWeight: '600', color: 'var(--text-secondary)', fontSize: '0.78rem', flexShrink: 0 }}>
+                        <div style={{ cursor: 'pointer' }} onClick={() => handleSortLoc('name')}>จังหวัด / ที่ทำการ {sortConfigLoc.key === 'name' ? (sortConfigLoc.dir === 'asc' ? '↑' : '↓') : '⇅'}</div>
+                        <div style={{ textAlign: 'right', cursor: 'pointer' }} onClick={() => handleSortLoc('actual')}>ผลงานจริง {sortConfigLoc.key === 'actual' ? (sortConfigLoc.dir === 'asc' ? '↑' : '↓') : '⇅'}</div>
+                        <div style={{ textAlign: 'right', cursor: 'pointer' }} onClick={() => handleSortLoc('pct')}>%สำเร็จ {sortConfigLoc.key === 'pct' ? (sortConfigLoc.dir === 'asc' ? '↑' : '↓') : '⇅'}</div>
+                        <div style={{ textAlign: 'right', color: '#38bdf8', cursor: 'pointer' }} onClick={() => handleSortLoc('yoy')}>%YoY {sortConfigLoc.key === 'yoy' ? (sortConfigLoc.dir === 'asc' ? '↑' : '↓') : '⇅'}</div>
+                        <div style={{ textAlign: 'right', color: '#a78bfa', cursor: 'pointer' }} onClick={() => handleSortLoc('mom')}>%MoM {sortConfigLoc.key === 'mom' ? (sortConfigLoc.dir === 'asc' ? '↑' : '↓') : '⇅'}</div>
                     </div>
 
                     <div style={{ display: 'block', marginTop: '0.5rem', overflowX: 'hidden', overflowY: 'visible' }}>
-                        {processed.hierarchicalLocationData.map((prov, idx) => {
+                        {getSortedData(processed.hierarchicalLocationData.map(p => ({ ...p, offices: getSortedData(p.offices, sortConfigLoc) })), sortConfigLoc).map((prov, idx) => {
                            const isExpanded = !!expandedProvs[prov.name];
                            const pct = prov.target > 0 ? (prov.actual / prov.target) * 100 : 0;
                            const provProp = processed.totals.actual > 0 ? (prov.actual / processed.totals.actual) * 100 : 0;
                            
                            return (
                              <div key={idx} style={{ background: 'var(--bg-highlight)', borderRadius: '8px', overflow: 'hidden' }}>
-                               <div onClick={() => toggleProv(prov.name)} style={{ display: 'flex', gap: '0.5rem', padding: '1rem 0.5rem', cursor: 'pointer', alignItems: 'center' }} className="hover:bg-white/5 transition-colors">
-                                  <div style={{ flex: 2.2, display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: '600', color: 'var(--text-primary)', fontSize: '0.95rem' }}>
+                               <div onClick={() => toggleProv(prov.name)} style={{ display: 'grid', gridTemplateColumns: 'minmax(120px, 2.2fr) 0.8fr 0.8fr 0.8fr 0.8fr', gap: '0.5rem', padding: '1rem 0.5rem', cursor: 'pointer', alignItems: 'center' }} className="hover:bg-white/5 transition-colors">
+                                  <div style={{ display: 'flex', overflow: 'hidden', alignItems: 'center', gap: '0.5rem', fontWeight: '600', color: 'var(--text-primary)', fontSize: '0.95rem' }}>
                                      {isExpanded ? <ChevronDown size={18} color={themeColor} /> : <ChevronRight size={18} color="var(--text-secondary)" />}
                                      <span title={prov.name} style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: maximizedPanel === 'drillLoc' ? 'none' : '140px' }}>{prov.name}</span>
                                   </div>
-                                  <div style={{ flex: 0.8, textAlign: 'right', fontWeight: 'bold', fontSize: '0.9rem' }}><span title={prov.actual.toLocaleString()}>{formatAmt(prov.actual)}</span></div>
-                                  <div style={{ flex: 0.8, textAlign: 'right', fontWeight: 'bold', fontSize: '0.9rem', color: getPerfColor(prov.actual, prov.target) }}>{pct.toFixed(0)}%</div>
-                                  <MiniBar pct={provProp} />
+                                  <div style={{ textAlign: 'right', fontWeight: 'bold', fontSize: '0.9rem' }}><span title={prov.actual.toLocaleString()}>{formatAmt(prov.actual)}</span></div>
+                                  <div style={{ textAlign: 'right', fontWeight: 'bold', fontSize: '0.9rem', color: getPerfColor(prov.actual, prov.target) }}>{pct.toFixed(0)}%</div>
+                                  <div style={{ textAlign: 'right', fontWeight: 'bold', fontSize: '0.9rem', color: prov.prev > 0 && (((prov.actual - prov.prev)/prov.prev)*100) >= 0 ? '#10b981' : '#ef4444' }}>{prov.prev > 0 ? (((prov.actual - prov.prev)/prov.prev)*100).toFixed(1) + '%' : 'N/A'}</div>
+                                  <div style={{ textAlign: 'right', fontWeight: 'bold', fontSize: '0.9rem', color: prov.prevMoActual > 0 && (((prov.currMoActual - prov.prevMoActual)/prov.prevMoActual)*100) >= 0 ? '#10b981' : '#ef4444' }}>{prov.prevMoActual > 0 ? (((prov.currMoActual - prov.prevMoActual)/prov.prevMoActual)*100).toFixed(1) + '%' : 'N/A'}</div>
                                </div>
 
                                {isExpanded && (
@@ -1070,14 +1271,15 @@ const Dashboard = () => {
                                       let officePct = office.target > 0 ? (office.actual / office.target) * 100 : 0;
                                       let officeProp = processed.totals.actual > 0 ? (office.actual / processed.totals.actual) * 100 : 0;
                                       return (
-                                         <div key={oidx} style={{ display: 'flex', gap: '0.5rem', padding: '0.5rem 0.5rem 0.5rem 2.5rem', fontSize: '0.85rem', alignItems: 'center', borderBottom: oidx !== prov.offices.length - 1 ? '1px solid var(--line-color-faint)' : 'none' }}>
-                                            <div style={{ flex: 2.2, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center' }}>
+                                         <div key={oidx} style={{ display: 'grid', gridTemplateColumns: 'minmax(120px, 2.2fr) 0.8fr 0.8fr 0.8fr 0.8fr', gap: '0.5rem', padding: '0.5rem 0.5rem 0.5rem 2.5rem', fontSize: '0.85rem', alignItems: 'center', borderBottom: oidx !== prov.offices.length - 1 ? '1px solid var(--line-color-faint)' : 'none' }}>
+                                            <div style={{ display: 'flex', overflow: 'hidden', color: 'var(--text-secondary)', alignItems: 'center' }}>
                                               <span style={{ display: 'inline-block', width: '4px', height: '4px', borderRadius: '50%', background: 'var(--text-secondary)', marginRight: '0.5rem' }}></span>
                                               <span title={office.name} style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: maximizedPanel === 'drillLoc' ? 'none' : '120px' }}>{office.name}</span>
                                             </div>
-                                            <div style={{ flex: 0.8, textAlign: 'right', color: 'var(--text-secondary)' }}>{formatFullAmt(office.actual)}</div>
-                                            <div style={{ flex: 0.8, textAlign: 'right', color: getPerfColor(office.actual, office.target) }}>{officePct.toFixed(0)}%</div>
-                                            <MiniBar pct={officeProp} />
+                                            <div style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>{formatFullAmt(office.actual)}</div>
+                                            <div style={{ textAlign: 'right', color: getPerfColor(office.actual, office.target) }}>{officePct.toFixed(0)}%</div>
+                                            <div style={{ textAlign: 'right', color: office.prev > 0 && (((office.actual - office.prev)/office.prev)*100) >= 0 ? '#10b981' : '#ef4444' }}>{office.prev > 0 ? (((office.actual - office.prev)/office.prev)*100).toFixed(1) + '%' : 'N/A'}</div>
+                                            <div style={{ textAlign: 'right', color: office.prevMoActual > 0 && (((office.currMoActual - office.prevMoActual)/office.prevMoActual)*100) >= 0 ? '#10b981' : '#ef4444' }}>{office.prevMoActual > 0 ? (((office.currMoActual - office.prevMoActual)/office.prevMoActual)*100).toFixed(1) + '%' : 'N/A'}</div>
                                          </div>
                                       )
                                    })}
@@ -1091,6 +1293,80 @@ const Dashboard = () => {
 
             </div>
 
+          </div>
+
+          <div style={{ flex: '0 0 300px', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+             <div className="glass-panel" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', height: '100%', minHeight: '500px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                  <AlertCircle size={20} color="#fb7185" />
+                  <h3 style={{ fontSize: '1.1rem', fontWeight: '600', color: 'var(--text-primary)', margin: 0 }}>ที่ทำการเฝ้าระวัง</h3>
+                </div>
+                <div style={{ display: 'flex', background: 'var(--bg-panel-secondary)', borderRadius: '8px', padding: '0.25rem', marginBottom: '0.5rem' }}>
+                   <button
+                     onClick={() => setWatchlistTab('target')}
+                     style={{ flex: 1, padding: '0.4rem', borderRadius: '6px', border: 'none', background: watchlistTab === 'target' ? themeColor : 'transparent', color: watchlistTab === 'target' ? '#fff' : 'var(--text-primary)', cursor: 'pointer', fontWeight: '600', fontSize: '0.8rem', transition: 'all 0.2s' }}
+                   >เทียบเป้า (%สำเร็จ)</button>
+                   <button
+                     onClick={() => setWatchlistTab('yoy')}
+                     style={{ flex: 1, padding: '0.4rem', borderRadius: '6px', border: 'none', background: watchlistTab === 'yoy' ? themeColor : 'transparent', color: watchlistTab === 'yoy' ? '#fff' : 'var(--text-primary)', cursor: 'pointer', fontWeight: '600', fontSize: '0.8rem', transition: 'all 0.2s' }}
+                   >% YoY</button>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', color: 'var(--text-secondary)', marginBottom: '0.75rem', padding: '0 0.25rem' }}>
+                   <span>⚠️ {watchlistData.length} จังหวัดที่ต้องระวัง</span>
+                   <span>{watchlistData.reduce((acc, p) => acc + p.matchingOffices.length, 0)} ที่ทำการ</span>
+                </div>
+                
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', overflowY: 'auto', flex: 1, paddingRight: '0.25rem' }}>
+                   {watchlistData.map((prov, pidx) => {
+                      const isExpanded = !!expandedWatchlistProvs[prov.name];
+                      const borderColor = prov.watchStatus?.c || '#6b7280';
+                      return (
+                        <div key={'wprov-' + pidx} style={{ background: 'var(--bg-highlight)', borderRadius: '8px', borderLeft: `3px solid ${borderColor}`, overflow: 'hidden' }}>
+                           <div onClick={() => toggleWatchlistProv(prov.name)} style={{ padding: '0.65rem 0.75rem', cursor: 'pointer' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
+                                 <div style={{ fontWeight: '600', fontSize: '0.88rem', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                                   {isExpanded ? <ChevronDown size={13} color="var(--text-secondary)" /> : <ChevronRight size={13} color="var(--text-secondary)" />}
+                                   <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '160px' }}>{prov.name}</span>
+                                   <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', fontWeight: '400', flexShrink: 0 }}>({prov.matchingOffices.length})</span>
+                                 </div>
+                                 {prov.watchStatus && <span style={{ fontSize: '0.82rem', fontWeight: 'bold', color: borderColor, flexShrink: 0 }}>{prov.watchStatus.val.toFixed(1)}%</span>}
+                              </div>
+                              {prov.watchStatus && (
+                                <div style={{ fontSize: '0.7rem', color: borderColor, background: `${borderColor}22`, padding: '1px 6px', borderRadius: '4px', display: 'inline-block' }}>
+                                  {prov.watchStatus.label} {prov.watchStatus.sub}
+                                </div>
+                              )}
+                           </div>
+                           {isExpanded && prov.matchingOffices.length > 0 && (
+                              <div style={{ background: 'var(--bg-panel-secondary)', borderTop: '1px solid var(--line-color-faint)', padding: '0.4rem' }}>
+                                {prov.matchingOffices.map((o, oidx) => {
+                                   const oc = o.watchStatus.c;
+                                   const pctVal = o.target > 0 ? ((o.actual/o.target)*100).toFixed(1) : '0';
+                                   const yoyVal = o.prev > 0 ? (((o.actual - o.prev) / o.prev) * 100).toFixed(1) : 'N/A';
+                                   return (
+                                     <div key={'woff-' + oidx} style={{ padding: '0.4rem 0.25rem', borderBottom: oidx !== prov.matchingOffices.length - 1 ? '1px dashed var(--line-color-faint)' : 'none' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.2rem' }}>
+                                          <span style={{ fontSize: '0.82rem', fontWeight: '600', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '150px' }}>• {o.name}</span>
+                                          <span style={{ fontSize: '0.8rem', fontWeight: 'bold', color: oc, flexShrink: 0 }}>{o.watchStatus.val.toFixed(1)}%</span>
+                                        </div>
+                                        <div style={{ fontSize: '0.68rem', color: oc }}>{o.watchStatus.label}</div>
+                                        <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.2rem' }}>
+                                           <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>Achieved: <b style={{ color: 'var(--text-primary)' }}>{pctVal}%</b></span>
+                                           <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>YoY: <b style={{ color: yoyVal !== 'N/A' && parseFloat(yoyVal) < 0 ? '#ef4444' : '#10b981' }}>{yoyVal !== 'N/A' ? yoyVal + '%' : 'N/A'}</b></span>
+                                        </div>
+                                     </div>
+                                   );
+                                })}
+                              </div>
+                           )}
+                        </div>
+                      );
+                   })}
+                   {watchlistData.length === 0 && (
+                     <div style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '2rem 0.5rem', fontSize: '0.85rem' }}>✅ ไม่มีที่ทำการที่ต้องกังวลในเดือนนี้</div>
+                   )}
+                </div>
+             </div>
           </div>
         </div>
         </div>
