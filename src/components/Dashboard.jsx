@@ -21,10 +21,8 @@ if (typeof document !== 'undefined') {
 }
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import Papa from 'papaparse';
-import { 
-  BarChart, Bar, AreaChart, Area, PieChart, Pie, Cell, 
-  XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend, ComposedChart, Line
-} from 'recharts';
+import { BarChart, Bar, AreaChart, Area, PieChart, Pie, Cell, 
+  XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend, ComposedChart, Line, LabelList } from 'recharts';
 import { Activity, DollarSign, TrendingUp, TrendingDown, RefreshCw, AlertCircle, Filter, Target, MapPin, Layers, ChevronRight, ChevronDown, Sparkles, Sun, Moon, Download, Camera, Maximize2, Minimize2, ArrowUp } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import * as XLSX from 'xlsx';
@@ -235,8 +233,10 @@ const Dashboard = () => {
   const captureAndDownload = async (filename) => {
     if (!dashboardRef.current) return;
     try {
-      const now = new Date();
-      const timeStr = now.toLocaleDateString('th-TH') + ' เวลา ' + now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) + ' น.';
+        const originalScrollY = window.scrollY;
+        window.scrollTo(0, 0);
+        const now = new Date();
+        const timeStr = now.toLocaleDateString('th-TH') + ' เวลา ' + now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) + ' น.';
       const canvas = await html2canvas(dashboardRef.current, {
           scale: 2,
           useCORS: true,
@@ -259,7 +259,8 @@ const Dashboard = () => {
       link.download = filename;
       link.href = image;
       link.click();
-    } catch (err) {
+        window.scrollTo(0, originalScrollY);
+      } catch (err) {
       console.error("Error exporting image:", err);
     }
   };
@@ -286,7 +287,7 @@ const Dashboard = () => {
             const prov = selectedExportProvinces[i];
             setExportProgress({ current: i + 1, total: selectedExportProvinces.length });
             
-            setSelectedProvince(prov);
+            setSelectedProvince(prov === 'ทั้งหมด' ? [] : [prov]);
             await delay(2500); 
             
             await captureAndDownload(`dashboard-${prov}-${selectedYear}-month${selectedMonth}.png`);
@@ -303,6 +304,8 @@ const Dashboard = () => {
   };
 
   const [rawData, setRawData] = useState([]);
+  const [showTrendMoM, setShowTrendMoM] = useState(false);
+  const [showScrollTop, setShowScrollTop] = useState(false);
   const [geoData, setGeoData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -402,6 +405,12 @@ const Dashboard = () => {
       error: () => { setLoading(false); setError("ไม่สามารถดึงข้อมูลจาก Google Sheets ได้"); }
     });
   };
+
+  useEffect(() => {
+    const handleScroll = () => setShowScrollTop(window.scrollY > 300);
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
   useEffect(() => { fetchData(); fetchGeoJSON(); }, []);
 
@@ -1088,10 +1097,10 @@ const Dashboard = () => {
              </div>
           </div>
 
-          <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
+          <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start', flexWrap: 'wrap', justifyContent: 'center' }}>
           
           {/* LEFT SIDEBAR (Fixed Width) */}
-          <div style={{ flex: '0 0 320px', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <div style={{ flex: '1 1 320px', minWidth: '300px', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
              
              {/* Totals Block */}
             <div style={{ 
@@ -1278,6 +1287,10 @@ const Dashboard = () => {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
                   <h3 style={{ fontSize: maximizedPanel === 'trend' ? '1.5rem' : '1rem', fontWeight: '600', color: 'var(--text-primary)', margin: 0 }}>แนวโน้มผลงานรายเดือน (ม.ค. - ธ.ค.)</h3>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '0.3rem', cursor: 'pointer', marginRight: '0.5rem', background: 'var(--bg-panel-secondary)', padding: '0.3rem 0.6rem', borderRadius: '8px', border: '1px solid var(--line-color-faint)' }}>
+                      <input type="checkbox" checked={showTrendMoM} onChange={e => setShowTrendMoM(e.target.checked)} style={{ accentColor: themeColor, width: '14px', height: '14px', cursor: 'pointer' }} />
+                      แสดง %MoM 
+                    </label>
                     {maximizedPanel === 'trend' && (<>
                       <button onClick={() => capturePanelById('trend', 'monthly-trend.png')} title="แคปเจอร์เป็นภาพ" style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', color: 'var(--text-primary)', borderRadius: '8px', padding: '0.4rem 0.5rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.8rem', fontFamily: 'Outfit' }}><Camera size={15} /> ภาพ</button>
                       <button onClick={() => {
@@ -1296,13 +1309,15 @@ const Dashboard = () => {
                 </div>
                 <div style={{ flex: 1, minHeight: 0 }}>
                   <ResponsiveContainer width="100%" height="100%">
-                    <ComposedChart data={processed.monthlyData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                    <ComposedChart data={showTrendMoM ? processed.monthlyData.map((d,i,a) => ({...d, momStr: i>0 && a[i-1].actual>0 ? (((d.actual - a[i-1].actual)/a[i-1].actual)*100 > 0 ? '+' : '') + (((d.actual - a[i-1].actual)/a[i-1].actual)*100).toFixed(1) + '%' : ''})) : processed.monthlyData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke={theme === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'} vertical={false} />
                       <XAxis dataKey="name" stroke={theme === 'dark' ? '#a1a1aa' : '#475569'} tick={{ fill: theme === 'dark' ? '#a1a1aa' : '#475569', fontSize: 11 }} axisLine={false} tickLine={false} />
                       <YAxis stroke={theme === 'dark' ? '#a1a1aa' : '#475569'} tick={{ fill: theme === 'dark' ? '#a1a1aa' : '#475569', fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={formatAmt} />
                       <RechartsTooltip formatter={(v) => formatFullAmt(v)} contentStyle={{ backgroundColor: 'var(--tooltip-bg)', border: 'none', borderRadius: '8px' }} />
                       <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
-                      <Bar dataKey="actual" name="ผลงาน" fill={themeColor} radius={[4, 4, 0, 0]} barSize={35} />
+                      <Bar dataKey="actual" name="ผลงาน" fill={themeColor} radius={[4, 4, 0, 0]} barSize={35}>
+                        {showTrendMoM && <LabelList dataKey="momStr" position="top" style={{ fill: theme === 'dark' ? '#a1a1aa' : '#475569', fontSize: 10, fontWeight: 600 }} />}
+                      </Bar>
                       <Line type="monotone" dataKey="target" name="เป้าหมาย" stroke="#fcd34d" strokeWidth={3} dot={{ r: 4 }} />
                       <Line type="monotone" dataKey="prev" name="ปีก่อน" stroke="#6b7280" strokeWidth={2} strokeDasharray="5 5" dot={false} />
                     </ComposedChart>
@@ -1311,7 +1326,7 @@ const Dashboard = () => {
             </div>
 
             <div
-              style={(maximizedPanel === 'drillBG' || maximizedPanel === 'drillLoc') ? { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9998, overflowY: 'auto', padding: '2rem', display: 'flex', flexDirection: 'column' } : { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}
+              style={(maximizedPanel === 'drillBG' || maximizedPanel === 'drillLoc') ? { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9998, overflowY: 'auto', padding: '2rem', display: 'flex', flexDirection: 'column' } : { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '1rem' }}
               onClick={(maximizedPanel === 'drillBG' || maximizedPanel === 'drillLoc') ? () => setMaximizedPanel(null) : undefined}
             >
                 
@@ -1350,12 +1365,12 @@ const Dashboard = () => {
                           {selectedEVM.length > 0 && <span style={{ fontSize: '0.72rem', background: 'var(--glass-border)', padding: '2px 8px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)', color: 'var(--text-primary)' }}>EVM: {selectedEVM.join(', ')}</span>}
                        </div>
                     )}
-                    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 2.5fr) 1fr 0.8fr 1fr 1fr', padding: '0.6rem 1rem', borderBottom: '1px solid var(--line-color)', fontWeight: '600', color: 'var(--text-secondary)', fontSize: '0.78rem', flexShrink: 0, cursor: 'pointer' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 2.5fr) 1fr 0.8fr 1fr', padding: '0.6rem 1rem', borderBottom: '1px solid var(--line-color)', fontWeight: '600', color: 'var(--text-secondary)', fontSize: '0.78rem', flexShrink: 0, cursor: 'pointer' }}>
                         <div onClick={() => handleSortBG('name')}>กลุ่มธุรกิจ / บริการ {sortConfigBG.key === 'name' ? (sortConfigBG.dir === 'asc' ? '↑' : '↓') : '⇅'}</div>
                         <div style={{ textAlign: 'right' }} onClick={() => handleSortBG('actual')}>ผลงานจริง {sortConfigBG.key === 'actual' ? (sortConfigBG.dir === 'asc' ? '↑' : '↓') : '⇅'}</div>
                         <div style={{ textAlign: 'right' }} onClick={() => handleSortBG('pct')}>%สำเร็จ {sortConfigBG.key === 'pct' ? (sortConfigBG.dir === 'asc' ? '↑' : '↓') : '⇅'}</div>
                         <div style={{ textAlign: 'right', color: '#38bdf8' }} onClick={() => handleSortBG('yoy')}>%YoY {sortConfigBG.key === 'yoy' ? (sortConfigBG.dir === 'asc' ? '↑' : '↓') : '⇅'}</div>
-                        <div style={{ textAlign: 'right', color: '#a78bfa' }} onClick={() => handleSortBG('mom')}>%MoM {sortConfigBG.key === 'mom' ? (sortConfigBG.dir === 'asc' ? '↑' : '↓') : '⇅'}</div>
+                        
                     </div>
 
                     <div style={{ display: 'block', marginTop: '0.5rem', overflowX: 'hidden', overflowY: 'visible' }}>
@@ -1365,7 +1380,7 @@ const Dashboard = () => {
                            
                            return (
                              <div key={idx} style={{ background: 'var(--bg-highlight)', borderRadius: '8px', overflow: 'hidden' }}>
-                               <div onClick={() => toggleBG(bg.name)} style={{ display: 'grid', gridTemplateColumns: 'minmax(120px, 2.5fr) 1fr 0.8fr 1fr 1fr', gap: '0.5rem', padding: '1rem', cursor: 'pointer', alignItems: 'center' }} className="hover:bg-white/5 transition-colors">
+                               <div onClick={() => toggleBG(bg.name)} style={{ display: 'grid', gridTemplateColumns: 'minmax(120px, 2.5fr) 1fr 0.8fr 1fr', gap: '0.5rem', padding: '1rem', cursor: 'pointer', alignItems: 'center' }} className="hover:bg-white/5 transition-colors">
                                   <div style={{ display: 'flex', overflow: 'hidden', alignItems: 'center', gap: '0.5rem', fontWeight: '600', color: 'var(--text-primary)', fontSize: '0.95rem' }}>
                                      {isExpanded ? <ChevronDown size={18} color={themeColor} /> : <ChevronRight size={18} color="var(--text-secondary)" />}
                                      <span title={bg.name} style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: maximizedPanel === 'drillBG' ? 'none' : '180px' }}>{bg.name}</span>
@@ -1375,9 +1390,7 @@ const Dashboard = () => {
                                   <div style={{ textAlign: 'right', fontWeight: 'bold', color: bg.prev > 0 && (((bg.actual - bg.prev)/bg.prev)*100) >= 0 ? '#10b981' : '#ef4444' }}>
                                     {bg.prev > 0 ? (((bg.actual - bg.prev)/bg.prev)*100).toFixed(1) + '%' : 'N/A'}
                                   </div>
-                                  <div style={{ textAlign: 'right', fontWeight: 'bold', color: bg.prevMoActual > 0 && (((bg.currMoActual - bg.prevMoActual)/bg.prevMoActual)*100) >= 0 ? '#10b981' : '#ef4444' }}>
-                                    {bg.prevMoActual > 0 ? (((bg.currMoActual - bg.prevMoActual)/bg.prevMoActual)*100).toFixed(1) + '%' : 'N/A'}
-                                  </div>
+                                  
                                </div>
 
                                {isExpanded && (
@@ -1385,7 +1398,7 @@ const Dashboard = () => {
                                    {bg.evms.map((evm, eidx) => {
                                       let evmPct = evm.target > 0 ? (evm.actual / evm.target) * 100 : 0;
                                       return (
-                                         <div key={eidx} style={{ display: 'grid', gridTemplateColumns: 'minmax(120px, 2.5fr) 1fr 0.8fr 1fr 1fr', gap: '0.5rem', padding: '0.5rem 1rem 0.5rem 2.5rem', fontSize: '0.85rem', alignItems: 'center', borderBottom: eidx !== bg.evms.length - 1 ? '1px solid var(--line-color-faint)' : 'none' }}>
+                                         <div key={eidx} style={{ display: 'grid', gridTemplateColumns: 'minmax(120px, 2.5fr) 1fr 0.8fr 1fr', gap: '0.5rem', padding: '0.5rem 1rem 0.5rem 2.5rem', fontSize: '0.85rem', alignItems: 'center', borderBottom: eidx !== bg.evms.length - 1 ? '1px solid var(--line-color-faint)' : 'none' }}>
                                             <div style={{ display: 'flex', overflow: 'hidden', color: 'var(--text-secondary)', alignItems: 'center' }}>
                                               <span style={{ display: 'inline-block', width: '4px', height: '4px', borderRadius: '50%', background: 'var(--text-secondary)', marginRight: '0.5rem' }}></span>
                                               <span title={evm.name} style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: maximizedPanel === 'drillBG' ? 'none' : '160px' }}>{evm.name}</span>
@@ -1395,9 +1408,7 @@ const Dashboard = () => {
                                             <div style={{ textAlign: 'right', color: evm.prev > 0 && (((evm.actual - evm.prev)/evm.prev)*100) >= 0 ? '#10b981' : '#ef4444' }}>
                                               {evm.prev > 0 ? (((evm.actual - evm.prev)/evm.prev)*100).toFixed(1) + '%' : 'N/A'}
                                             </div>
-                                            <div style={{ textAlign: 'right', color: evm.prevMoActual > 0 && (((evm.currMoActual - evm.prevMoActual)/evm.prevMoActual)*100) >= 0 ? '#10b981' : '#ef4444' }}>
-                                              {evm.prevMoActual > 0 ? (((evm.currMoActual - evm.prevMoActual)/evm.prevMoActual)*100).toFixed(1) + '%' : 'N/A'}
-                                            </div>
+                                            
                                          </div>
                                       )
                                    })}
@@ -1436,12 +1447,12 @@ const Dashboard = () => {
                           {selectedEVM.length > 0 && <span style={{ fontSize: '0.72rem', background: 'var(--glass-border)', padding: '2px 8px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)', color: 'var(--text-primary)' }}>EVM: {selectedEVM.join(', ')}</span>}
                        </div>
                     )}
-                    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 2.2fr) 0.8fr 0.8fr 0.8fr 0.8fr', padding: '0.6rem 1rem', borderBottom: '1px solid var(--line-color)', fontWeight: '600', color: 'var(--text-secondary)', fontSize: '0.78rem', flexShrink: 0 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 2.2fr) 0.8fr 0.8fr 0.8fr', padding: '0.6rem 1rem', borderBottom: '1px solid var(--line-color)', fontWeight: '600', color: 'var(--text-secondary)', fontSize: '0.78rem', flexShrink: 0 }}>
                         <div style={{ cursor: 'pointer' }} onClick={() => handleSortLoc('name')}>จังหวัด / ที่ทำการ {sortConfigLoc.key === 'name' ? (sortConfigLoc.dir === 'asc' ? '↑' : '↓') : '⇅'}</div>
                         <div style={{ textAlign: 'right', cursor: 'pointer' }} onClick={() => handleSortLoc('actual')}>ผลงานจริง {sortConfigLoc.key === 'actual' ? (sortConfigLoc.dir === 'asc' ? '↑' : '↓') : '⇅'}</div>
                         <div style={{ textAlign: 'right', cursor: 'pointer' }} onClick={() => handleSortLoc('pct')}>%สำเร็จ {sortConfigLoc.key === 'pct' ? (sortConfigLoc.dir === 'asc' ? '↑' : '↓') : '⇅'}</div>
                         <div style={{ textAlign: 'right', color: '#38bdf8', cursor: 'pointer' }} onClick={() => handleSortLoc('yoy')}>%YoY {sortConfigLoc.key === 'yoy' ? (sortConfigLoc.dir === 'asc' ? '↑' : '↓') : '⇅'}</div>
-                        <div style={{ textAlign: 'right', color: '#a78bfa', cursor: 'pointer' }} onClick={() => handleSortLoc('mom')}>%MoM {sortConfigLoc.key === 'mom' ? (sortConfigLoc.dir === 'asc' ? '↑' : '↓') : '⇅'}</div>
+                        
                     </div>
 
                     <div style={{ display: 'block', marginTop: '0.5rem', overflowX: 'hidden', overflowY: 'visible' }}>
@@ -1452,7 +1463,7 @@ const Dashboard = () => {
                            
                            return (
                              <div key={idx} style={{ background: 'var(--bg-highlight)', borderRadius: '8px', overflow: 'hidden' }}>
-                               <div onClick={() => toggleProv(prov.name)} style={{ display: 'grid', gridTemplateColumns: 'minmax(120px, 2.2fr) 0.8fr 0.8fr 0.8fr 0.8fr', gap: '0.5rem', padding: '1rem 0.5rem', cursor: 'pointer', alignItems: 'center' }} className="hover:bg-white/5 transition-colors">
+                               <div onClick={() => toggleProv(prov.name)} style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 2.2fr) 0.8fr 0.8fr 0.8fr', gap: '0.5rem', padding: '1rem 0.5rem', cursor: 'pointer', alignItems: 'center' }} className="hover:bg-white/5 transition-colors">
                                   <div style={{ display: 'flex', overflow: 'hidden', alignItems: 'center', gap: '0.5rem', fontWeight: '600', color: 'var(--text-primary)', fontSize: '0.95rem' }}>
                                      {isExpanded ? <ChevronDown size={18} color={themeColor} /> : <ChevronRight size={18} color="var(--text-secondary)" />}
                                      <span title={prov.name} style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: maximizedPanel === 'drillLoc' ? 'none' : '140px' }}>{prov.name}</span>
@@ -1460,7 +1471,7 @@ const Dashboard = () => {
                                   <div style={{ textAlign: 'right', fontWeight: 'bold', fontSize: '0.9rem' }}><span title={prov.actual.toLocaleString()}>{formatAmt(prov.actual)}</span></div>
                                   <div style={{ textAlign: 'right', fontWeight: 'bold', fontSize: '0.9rem', color: getPerfColor(prov.actual, prov.target) }}>{pct.toFixed(0)}%</div>
                                   <div style={{ textAlign: 'right', fontWeight: 'bold', fontSize: '0.9rem', color: prov.prev > 0 && (((prov.actual - prov.prev)/prov.prev)*100) >= 0 ? '#10b981' : '#ef4444' }}>{prov.prev > 0 ? (((prov.actual - prov.prev)/prov.prev)*100).toFixed(1) + '%' : 'N/A'}</div>
-                                  <div style={{ textAlign: 'right', fontWeight: 'bold', fontSize: '0.9rem', color: prov.prevMoActual > 0 && (((prov.currMoActual - prov.prevMoActual)/prov.prevMoActual)*100) >= 0 ? '#10b981' : '#ef4444' }}>{prov.prevMoActual > 0 ? (((prov.currMoActual - prov.prevMoActual)/prov.prevMoActual)*100).toFixed(1) + '%' : 'N/A'}</div>
+                                  
                                </div>
 
                                {isExpanded && (
@@ -1469,7 +1480,7 @@ const Dashboard = () => {
                                       let officePct = office.target > 0 ? (office.actual / office.target) * 100 : 0;
                                       let officeProp = processed.totals.actual > 0 ? (office.actual / processed.totals.actual) * 100 : 0;
                                       return (
-                                         <div key={oidx} style={{ display: 'grid', gridTemplateColumns: 'minmax(120px, 2.2fr) 0.8fr 0.8fr 0.8fr 0.8fr', gap: '0.5rem', padding: '0.5rem 0.5rem 0.5rem 2.5rem', fontSize: '0.85rem', alignItems: 'center', borderBottom: oidx !== prov.offices.length - 1 ? '1px solid var(--line-color-faint)' : 'none' }}>
+                                         <div key={oidx} style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 2.2fr) 0.8fr 0.8fr 0.8fr', gap: '0.5rem', padding: '0.5rem 0.5rem 0.5rem 2.5rem', fontSize: '0.85rem', alignItems: 'center', borderBottom: oidx !== prov.offices.length - 1 ? '1px solid var(--line-color-faint)' : 'none' }}>
                                             <div style={{ display: 'flex', overflow: 'hidden', color: 'var(--text-secondary)', alignItems: 'center' }}>
                                               <span style={{ display: 'inline-block', width: '4px', height: '4px', borderRadius: '50%', background: 'var(--text-secondary)', marginRight: '0.5rem' }}></span>
                                               <span title={office.name} style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: maximizedPanel === 'drillLoc' ? 'none' : '120px' }}>{office.name}</span>
@@ -1477,7 +1488,7 @@ const Dashboard = () => {
                                             <div style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>{formatFullAmt(office.actual)}</div>
                                             <div style={{ textAlign: 'right', color: getPerfColor(office.actual, office.target) }}>{officePct.toFixed(0)}%</div>
                                             <div style={{ textAlign: 'right', color: office.prev > 0 && (((office.actual - office.prev)/office.prev)*100) >= 0 ? '#10b981' : '#ef4444' }}>{office.prev > 0 ? (((office.actual - office.prev)/office.prev)*100).toFixed(1) + '%' : 'N/A'}</div>
-                                            <div style={{ textAlign: 'right', color: office.prevMoActual > 0 && (((office.currMoActual - office.prevMoActual)/office.prevMoActual)*100) >= 0 ? '#10b981' : '#ef4444' }}>{office.prevMoActual > 0 ? (((office.currMoActual - office.prevMoActual)/office.prevMoActual)*100).toFixed(1) + '%' : 'N/A'}</div>
+                                            
                                          </div>
                                       )
                                    })}
@@ -1571,6 +1582,43 @@ const Dashboard = () => {
       )}
 
             {/* Export Modal */}
+            {/* Dashboard Footer */}
+      <footer style={{ marginTop: '2rem', padding: '1.5rem', textAlign: 'center', borderTop: '1px solid var(--glass-border)', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+        <p style={{ margin: 0 }}>
+          จัดทำโดย: <strong style={{color: 'var(--text-primary)'}}>ส่วนการตลาดและบริการลูกค้า สำนักงานไปรษณีย์เขต 6</strong> | ทีมสร้าง: <strong style={{color: 'var(--text-primary)'}}>ฮ.ฮูก ทีม</strong>
+        </p>
+      </footer>
+
+      {/* Scroll to Top Button */}
+      {showScrollTop && (
+        <button
+          data-html2canvas-ignore="true"
+          onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+          style={{
+            position: 'fixed',
+            bottom: '2rem',
+            right: '2rem',
+            width: '45px',
+            height: '45px',
+            borderRadius: '50%',
+            background: themeColor,
+            color: '#fff',
+            border: 'none',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            zIndex: 9999,
+            transition: 'transform 0.2s',
+          }}
+          onMouseOver={(e) => { e.currentTarget.style.transform = 'scale(1.1)'; e.currentTarget.style.background = 'var(--bg-highlight-hover)'; e.currentTarget.style.border = '1px solid ' + themeColor; e.currentTarget.style.color = themeColor; }}
+          onMouseOut={(e) => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.background = themeColor; e.currentTarget.style.color = '#fff'; e.currentTarget.style.border = 'none'; }}
+        >
+          <ArrowUp size={24} />
+        </button>
+      )}
+
       {isExportModalOpen && (
         <div data-html2canvas-ignore="true" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div className="glass-panel" style={{ width: '450px', maxWidth: '90vw', background: theme === 'dark' ? '#18181b' : '#ffffff', color: 'var(--text-primary)', border: '1px solid var(--glass-border)' }}>
@@ -1603,7 +1651,7 @@ const Dashboard = () => {
                       </div>
                     </div>
                     
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '0.5rem' }}>
                       {['ทั้งหมด', ...availableProvinces].map(p => (
                         <label key={p} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9rem', cursor: 'pointer', color: 'var(--text-primary)' }}>
                           <input type="checkbox" checked={selectedExportProvinces.includes(p)} onChange={(e) => {
