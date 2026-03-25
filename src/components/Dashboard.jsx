@@ -27,6 +27,7 @@ import { Activity, DollarSign, TrendingUp, TrendingDown, RefreshCw, AlertCircle,
 import html2canvas from 'html2canvas';
 import * as XLSX from 'xlsx';
 import { MapContainer, TileLayer, GeoJSON } from 'react-leaflet';
+import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
 const SHEET_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQtmCb551xMV17lEECaAvPBySZ43zIrHT2jbz84udDmB9cvwiPYUmwogIdxranN_J3fheWXJZLrj2hV/pub?gid=1362457951&single=true&output=csv';
@@ -235,17 +236,32 @@ const Dashboard = () => {
     try {
         const originalScrollY = window.scrollY;
         window.scrollTo(0, 0);
+        await new Promise(r => setTimeout(r, 1200));
         const now = new Date();
         const timeStr = now.toLocaleDateString('th-TH') + ' เวลา ' + now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) + ' น.';
       const canvas = await html2canvas(dashboardRef.current, {
           scale: 2,
+          allowTaint: true,
+          logging: false,
           useCORS: true,
           backgroundColor: theme === 'dark' ? '#09090b' : '#f8fafc',
           onclone: (clonedDoc) => {
             const watermark = clonedDoc.createElement('div');
             watermark.style.cssText = 'position: absolute; top: 18px; right: 28px; font-size: 13px; color: ' + (theme === 'dark' ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.6)') + '; text-align: right; line-height: 1.5; font-family: Outfit, sans-serif; font-weight: 500; z-index: 999;';
             watermark.innerHTML = "ข้อมูลที่ Capture ณ วันที่: " + timeStr;
-            const header = clonedDoc.querySelector('.dashboard-container > div > div.glass-panel');
+            const mapPane = clonedDoc.querySelector('.leaflet-map-pane');
+              if (mapPane) {
+                  const transform = mapPane.style.transform;
+                  if (transform) {
+                      const match = transform.match(/translate3d\(([^,]+),\s*([^,]+)/);
+                      if (match) {
+                          mapPane.style.transform = 'none';
+                          mapPane.style.left = match[1];
+                          mapPane.style.top = match[2];
+                      }
+                  }
+              }
+              const header = clonedDoc.querySelector('.dashboard-container > div > div.glass-panel');
             if (header) {
                 if (window.getComputedStyle(header).position === 'static') header.style.position = 'relative';
                 header.appendChild(watermark);
@@ -836,12 +852,14 @@ const Dashboard = () => {
       
       const labelHtml = `<div style="text-align:center;color:#fff;text-shadow:-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000,0 1px 3px rgba(0,0,0,0.8);font-weight:800;font-size:11px;line-height:1;pointer-events:none;">${thName}<br/><span style="font-size:9px;opacity:0.95;">${abbrev}</span></div>`;
       
-      layer.bindTooltip(labelHtml, {
-        permanent: true,
-        direction: 'center',
-        className: 'clean-label',
-        opacity: 1
-      });
+      const offsetMap = { 'ตาก': [0, 30], 'พิษณุโลก': [-5, 15] };
+        layer.bindTooltip(labelHtml, {
+          permanent: true,
+          direction: 'center',
+          className: 'clean-label',
+          opacity: 1,
+          offset: L.point(...(offsetMap[thName] || [0, 0]))
+        });
 
       const popupContent = `
         <div style="font-family:Outfit,sans-serif;color:#fff;padding:4px;">
@@ -970,9 +988,9 @@ const Dashboard = () => {
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', padding: '1.5rem 1.75rem 0.75rem', maxWidth: '100%', boxSizing: 'border-box' }}>
          <button
            onClick={fetchData} disabled={loading}
-           style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.6rem 1.25rem', borderRadius: '9999px', background: 'rgba(255,255,255,0.08)', color: '#ffffff', cursor: loading ? 'not-allowed' : 'pointer', fontWeight: '600', fontSize: '0.95rem', transition: 'all 0.3s', opacity: loading ? 0.7 : 1, backdropFilter: 'blur(8px)', border: '1px solid rgba(255,255,255,0.15)' }}
-           onMouseOver={(e) => { if (!loading) { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.background = 'rgba(255,255,255,0.15)'; } }}
-           onMouseOut={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; }}
+            style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.6rem 1.25rem', borderRadius: '9999px', background: theme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)', color: theme === 'dark' ? '#ffffff' : '#1e293b', cursor: loading ? 'not-allowed' : 'pointer', fontWeight: '600', fontSize: '0.95rem', transition: 'all 0.3s', opacity: loading ? 0.7 : 1, backdropFilter: 'blur(8px)', border: theme === 'dark' ? '1px solid rgba(255,255,255,0.15)' : '1px solid rgba(0,0,0,0.15)' }}
+            onMouseOver={(e) => { if (!loading) { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.background = theme === 'dark' ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)'; } }}
+            onMouseOut={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.background = theme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'; }}
          >
            <RefreshCw size={18} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} /> รีเฟรชข้อมูล
          </button>
@@ -1236,9 +1254,9 @@ const Dashboard = () => {
 
                 <button
                   onClick={handleResetFilters}
-                  style={{ marginLeft: 'auto', padding: '0.4rem 0.85rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem', background: 'rgba(251,113,133,0.15)', border: '1px solid rgba(251,113,133,0.35)', color: '#fb7185', borderRadius: '10px', cursor: 'pointer', fontFamily: 'Outfit', fontWeight: '600', fontSize: '0.82rem', transition: 'all 0.2s', whiteSpace: 'nowrap' }}
-                  onMouseOver={(e) => { e.currentTarget.style.background = 'rgba(251,113,133,0.25)'; }}
-                  onMouseOut={(e) => { e.currentTarget.style.background = 'rgba(251,113,133,0.15)'; }}
+                  style={{ marginLeft: 'auto', padding: '0.4rem 0.85rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem', background: theme === 'dark' ? 'rgba(251,113,133,0.15)' : '#fee2e2', border: theme === 'dark' ? '1px solid rgba(251,113,133,0.35)' : '1px solid #fca5a5', color: theme === 'dark' ? '#fb7185' : '#ef4444', borderRadius: '10px', cursor: 'pointer', fontFamily: 'Outfit', fontWeight: '600', fontSize: '0.82rem', transition: 'all 0.2s', whiteSpace: 'nowrap' }}
+                  onMouseOver={(e) => { e.currentTarget.style.background = theme === 'dark' ? 'rgba(251,113,133,0.25)' : '#fecaca'; }}
+                  onMouseOut={(e) => { e.currentTarget.style.background = theme === 'dark' ? 'rgba(251,113,133,0.15)' : '#fee2e2'; }}
                 >
                   <Filter size={13} /> รีเซ็ต
                 </button>
