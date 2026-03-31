@@ -1,4 +1,4 @@
-
+﻿
 // Inject custom styles for map labels
 if (typeof document !== 'undefined') {
   const style = document.createElement('style');
@@ -30,6 +30,7 @@ import { MapContainer, TileLayer, GeoJSON } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
+
 const SHEET_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQtmCb551xMV17lEECaAvPBySZ43zIrHT2jbz84udDmB9cvwiPYUmwogIdxranN_J3fheWXJZLrj2hV/pub?gid=1362457951&single=true&output=csv';
 
 const COLORS = ['#0d9488', '#ec4899', '#f59e0b', '#3b82f6', '#ef4444', '#84cc16', '#8b5cf6'];
@@ -41,6 +42,39 @@ const PROVINCE_MAP_EN_TH = {
   'Phichit': 'พิจิตร', 'Phetchabun': 'เพชรบูรณ์'
 };
 
+// Compute centroid of a GeoJSON feature (supports Polygon and MultiPolygon) using polylabel
+function getFeatureCentroid(feature) {
+  const geom = feature.geometry;
+  if (!geom) return null;
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  const update = (p) => {
+    if(p[0]<minX)minX=p[0];if(p[0]>maxX)maxX=p[0];
+    if(p[1]<minY)minY=p[1];if(p[1]>maxY)maxY=p[1];
+  };
+  if (geom.type === 'Polygon') {
+    geom.coordinates[0].forEach(update);
+  } else if (geom.type === 'MultiPolygon') {
+    geom.coordinates.forEach(poly => poly[0].forEach(update));
+  } else {
+    return null;
+  }
+  
+  let lat = (minY + maxY) / 2;
+  let lng = (minX + maxX) / 2;
+  
+  // Optical offsets for absolute perfectly centered visual alignment matching human aesthetics
+  const n = feature.properties ? feature.properties.NAME_1 : '';
+  if (n === 'Tak') { lat = 16.70; lng = 98.76; }
+  else if (n === 'Kamphaeng Phet') { lat = 16.05; lng = 99.40; }
+  else if (n === 'Phichit') { lat = 15.95; lng = 100.20; }
+  else if (n === 'Phetchabun') { lat = 15.93; lng = 100.95; }
+  else if (n === 'Sukhothai') { lat = 17.05; lng = 99.53; }
+  else if (n === 'Uthai Thani') { lat = 15.00; lng = 99.28; }
+  else if (n === 'Phitsanulok') { lat = 16.70; lng = 100.40; }
+  else if (n === 'Nakhon Sawan') { lat = 15.30; lng = 100.25; }
+  
+  return [lat, lng];
+}
 
 const MultiSelect = ({ options, selected, onChange, placeholder, disabled, style }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -239,6 +273,13 @@ const Dashboard = () => {
         await new Promise(r => setTimeout(r, 1200));
         const now = new Date();
         const timeStr = now.toLocaleDateString('th-TH') + ' เวลา ' + now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) + ' น.';
+        let mapSnapshot = null;
+        const mapEl = dashboardRef.current.querySelector('.leaflet-container');
+        if (mapEl) {
+          try {
+            mapSnapshot = await html2canvas(mapEl, { scale: 2, useCORS: true, logging: false, backgroundColor: null });
+          } catch(e) { console.warn('Map pre-capture failed', e); }
+        }
       const canvas = await html2canvas(dashboardRef.current, {
           scale: 2,
           allowTaint: true,
@@ -247,34 +288,48 @@ const Dashboard = () => {
           backgroundColor: theme === 'dark' ? '#09090b' : '#f8fafc',
           onclone: (clonedDoc) => {
             const watermark = clonedDoc.createElement('div');
-            watermark.style.cssText = 'position: absolute; top: 18px; right: 28px; font-size: 13px; color: ' + (theme === 'dark' ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.6)') + '; text-align: right; line-height: 1.5; font-family: Outfit, sans-serif; font-weight: 500; z-index: 999;';
-            watermark.innerHTML = "ข้อมูลที่ Capture ณ วันที่: " + timeStr;
-            const mapPane = clonedDoc.querySelector('.leaflet-map-pane');
-              if (mapPane) {
-                  const transform = mapPane.style.transform;
-                  if (transform) {
-                      const match = transform.match(/translate3d\(([^,]+),\s*([^,]+)/);
-                      if (match) {
-                          mapPane.style.transform = 'none';
-                          mapPane.style.left = match[1];
-                          mapPane.style.top = match[2];
-                      }
-                  }
+            watermark.style.cssText = 'position: absolute; bottom: 12px; right: 28px; font-size: 13px; color: ' + (theme === 'dark' ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.6)') + '; text-align: right; line-height: 1.5; font-family: Outfit, sans-serif; font-weight: 500; z-index: 999;';
+            watermark.innerHTML = "จัดทำโดย: ส่วนการตลาดและบริการลูกค้า สำนักงานไปรษณีย์เขต 6 (ทีม: ฮ.ฮูก ทีม)<br/>ข้อมูลที่ Capture ณ วันที่: " + timeStr;
+            // Overlay map with pre-captured canvas to prevent position shift
+            if (mapSnapshot) {
+              const clonedMapEl = clonedDoc.querySelector('.leaflet-container');
+              if (clonedMapEl) {
+                const overlay = clonedDoc.createElement('canvas');
+                overlay.width = mapSnapshot.width;
+                overlay.height = mapSnapshot.height;
+                overlay.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;z-index:99999;pointer-events:none;';
+                const ctx = overlay.getContext('2d');
+                ctx.drawImage(mapSnapshot, 0, 0);
+                const mapPane = clonedMapEl.querySelector('.leaflet-map-pane');
+                if (mapPane) mapPane.style.visibility = 'hidden';
+                clonedMapEl.style.position = 'relative';
+                clonedMapEl.appendChild(overlay);
               }
-              const header = clonedDoc.querySelector('.dashboard-container > div > div.glass-panel');
-            if (header) {
-                if (window.getComputedStyle(header).position === 'static') header.style.position = 'relative';
-                header.appendChild(watermark);
+            }
+
+            // Attach watermark to dashboard container
+            const dashContainer = clonedDoc.querySelector('[data-dashboard-root]');
+            if (dashContainer) {
+                dashContainer.style.position = 'relative';
+                dashContainer.style.paddingBottom = '3.5rem';
+                dashContainer.appendChild(watermark);
             } else {
+                clonedDoc.body.style.position = 'relative';
                 clonedDoc.body.appendChild(watermark);
             }
           }
         });
       const image = canvas.toDataURL("image/png", 1.0);
+      const res = await fetch(image);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.download = filename;
-      link.href = image;
+      link.href = url;
+      document.body.appendChild(link);
       link.click();
+      document.body.removeChild(link);
+      setTimeout(() => URL.revokeObjectURL(url), 100);
         window.scrollTo(0, originalScrollY);
       } catch (err) {
       console.error("Error exporting image:", err);
@@ -846,20 +901,39 @@ const Dashboard = () => {
     const thName = PROVINCE_MAP_EN_TH[feature.properties.NAME_1];
     const data = processed?.provinceAgg[thName];
 
+    // Compute centroid of the polygon for label placement
+    const centroid = getFeatureCentroid(feature);
+
     if (data) {
       const pct = data.target > 0 ? ((data.actual / data.target) * 100).toFixed(1) : 0;
       const abbrev = data.actual >= 1e6 ? (data.actual/1e6).toFixed(1)+'M' : data.actual >= 1e3 ? (data.actual/1e3).toFixed(0)+'K' : data.actual.toFixed(0);
       
       const labelHtml = `<div style="text-align:center;color:#fff;text-shadow:-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000,0 1px 3px rgba(0,0,0,0.8);font-weight:800;font-size:11px;line-height:1;pointer-events:none;">${thName}<br/><span style="font-size:9px;opacity:0.95;">${abbrev}</span></div>`;
       
-      const offsetMap = { 'ตาก': [0, 30], 'พิษณุโลก': [-5, 15] };
+      // Use centroid for label placement instead of layer center
+      if (centroid) {
+        const marker = L.marker(centroid, { opacity: 0, interactive: false });
+        marker.bindTooltip(labelHtml, {
+          permanent: true,
+          direction: 'center',
+          className: 'clean-label',
+          opacity: 1
+        });
+        // Attach marker to layer's map when layer is added
+        layer.on('add', function(e) {
+          marker.addTo(e.target._map);
+        });
+        layer.on('remove', function() {
+          marker.remove();
+        });
+      } else {
         layer.bindTooltip(labelHtml, {
           permanent: true,
           direction: 'center',
           className: 'clean-label',
-          opacity: 1,
-          offset: L.point(...(offsetMap[thName] || [0, 0]))
+          opacity: 1
         });
+      }
 
       const popupContent = `
         <div style="font-family:Outfit,sans-serif;color:#fff;padding:4px;">
@@ -873,8 +947,15 @@ const Dashboard = () => {
       `;
       layer.bindPopup(popupContent);
     } else {
-      layer.bindTooltip(thName, { permanent: true, direction: 'center', className: 'clean-label', opacity: 0.5 });
-      layer.bindPopup(`<b>${thName}</b><br/>ไม่พบข้อมูลข้อมูล`);
+      if (centroid) {
+        const marker = L.marker(centroid, { opacity: 0, interactive: false });
+        marker.bindTooltip(thName || feature.properties.NAME_1, { permanent: true, direction: 'center', className: 'clean-label', opacity: 0.5 });
+        layer.on('add', function(e) { marker.addTo(e.target._map); });
+        layer.on('remove', function() { marker.remove(); });
+      } else {
+        layer.bindTooltip(thName || feature.properties.NAME_1, { permanent: true, direction: 'center', className: 'clean-label', opacity: 0.5 });
+      }
+      layer.bindPopup(`<b>${thName || feature.properties.NAME_1}</b><br/>ไม่พบข้อมูล`);
     }
   };
 
@@ -907,6 +988,15 @@ const Dashboard = () => {
       const now = new Date();
       const timeStr = now.toLocaleDateString('th-TH') + ' เวลา ' + now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) + ' น.';
       
+      // Pre-capture: snapshot map if this panel contains one
+      let mapSnapshot = null;
+      const mapEl = el.querySelector('.leaflet-container');
+      if (mapEl) {
+        try {
+          mapSnapshot = await html2canvas(mapEl, { scale: 2, useCORS: true, logging: false, backgroundColor: null });
+        } catch(e) { console.warn('Map pre-capture failed', e); }
+      }
+
       const canvas = await html2canvas(el, { 
         scale: 2, 
         useCORS: true, 
@@ -915,6 +1005,23 @@ const Dashboard = () => {
         onclone: (clonedDoc) => {
           const clonedEl = clonedDoc.querySelector('[data-panel-id="' + panelId + '"]');
           if (clonedEl) {
+            // Overlay map with pre-captured canvas if applicable
+            if (mapSnapshot) {
+              const clonedMapEl = clonedEl.querySelector('.leaflet-container');
+              if (clonedMapEl) {
+                const overlay = clonedDoc.createElement('canvas');
+                overlay.width = mapSnapshot.width;
+                overlay.height = mapSnapshot.height;
+                overlay.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;z-index:99999;pointer-events:none;';
+                const ctx = overlay.getContext('2d');
+                ctx.drawImage(mapSnapshot, 0, 0);
+                const mapPane = clonedMapEl.querySelector('.leaflet-map-pane');
+                if (mapPane) mapPane.style.visibility = 'hidden';
+                clonedMapEl.style.position = 'relative';
+                clonedMapEl.appendChild(overlay);
+              }
+            }
+
             clonedEl.style.position = 'relative';
             clonedEl.style.paddingBottom = '3.5rem';
             
@@ -934,17 +1041,36 @@ const Dashboard = () => {
           }
         }
       });
+      const dataUrl = canvas.toDataURL('image/png', 1.0);
+      const res = await fetch(dataUrl);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.download = filename;
-      link.href = canvas.toDataURL('image/png', 1.0);
+      link.href = url;
+      document.body.appendChild(link);
       link.click();
+      document.body.removeChild(link);
+      setTimeout(() => URL.revokeObjectURL(url), 100);
     } catch(err) { console.error('Capture error', err); }
   };
 
-  // Utility: export rows to xlsx
+  // Utility: build filter info object from current state
+  const getActiveFilters = () => ({
+    year: selectedYear,
+    months: selectedMonth.length > 0 ? selectedMonth.map(m => MONTH_NAMES[m-1]).join(', ') : 'ทั้งหมด',
+    category: activeTab === 'income' ? 'รายได้' : 'ค่าใช้จ่าย',
+    provinces: selectedProvince.length > 0 ? selectedProvince.join(', ') : 'ทั้งหมด',
+    offices: selectedOffice.length > 0 ? selectedOffice.join(', ') : 'ทั้งหมด',
+    businessGroups: selectedBG.length > 0 ? selectedBG.join(', ') : 'ทั้งหมด',
+    evmServices: selectedEVM.length > 0 ? selectedEVM.join(', ') : 'ทั้งหมด'
+  });
+
+  // Utility: export rows to xlsx (with filter metadata)
   const exportXLSX = (rows, filename) => {
     const now = new Date();
     const timeStr = now.toLocaleDateString('th-TH') + ' เวลา ' + now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) + ' น.';
+    const filters = getActiveFilters();
     
     // Create an empty row spacer 
     let spacer = {};
@@ -961,12 +1087,33 @@ const Dashboard = () => {
     const metaDate = Object.assign({}, spacer);
     metaDate[firstKey] = "ข้อมูล Export ณ วันที่: " + timeStr;
 
-    const enrichedRows = [...rows, spacer, metaCredit, metaDate];
+    // Build filter metadata rows
+    const filterRows = [
+      { ...spacer, [firstKey]: '--- ฟิลเตอร์ที่เลือก ---' },
+      { ...spacer, [firstKey]: 'ปี พ.ศ.: ' + filters.year },
+      { ...spacer, [firstKey]: 'เดือน: ' + filters.months },
+      { ...spacer, [firstKey]: 'หมวดหมู่: ' + filters.category },
+      { ...spacer, [firstKey]: 'จังหวัด: ' + filters.provinces },
+      { ...spacer, [firstKey]: 'ที่ทำการ: ' + filters.offices },
+      { ...spacer, [firstKey]: 'กลุ่มธุรกิจ: ' + filters.businessGroups },
+      { ...spacer, [firstKey]: 'EVM Service: ' + filters.evmServices },
+    ];
+
+    const enrichedRows = [...rows, spacer, ...filterRows, spacer, metaCredit, metaDate];
 
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.json_to_sheet(enrichedRows);
     XLSX.utils.book_append_sheet(wb, ws, 'ข้อมูล');
-    XLSX.writeFile(wb, filename);
+    const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    const data = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(data);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(() => URL.revokeObjectURL(url), 100);
   };
 
   const handleResetFilters = () => {
@@ -1728,3 +1875,4 @@ const Dashboard = () => {
 };
 
 export default Dashboard;
+
