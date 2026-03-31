@@ -273,13 +273,7 @@ const Dashboard = () => {
         await new Promise(r => setTimeout(r, 1200));
         const now = new Date();
         const timeStr = now.toLocaleDateString('th-TH') + ' เวลา ' + now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) + ' น.';
-        let mapSnapshot = null;
-        const mapEl = dashboardRef.current.querySelector('.leaflet-container');
-        if (mapEl) {
-          try {
-            mapSnapshot = await html2canvas(mapEl, { scale: 2, useCORS: true, logging: false, backgroundColor: null });
-          } catch(e) { console.warn('Map pre-capture failed', e); }
-        }
+        
       const canvas = await html2canvas(dashboardRef.current, {
           scale: 2,
           allowTaint: true,
@@ -290,32 +284,35 @@ const Dashboard = () => {
             const watermark = clonedDoc.createElement('div');
             watermark.style.cssText = 'position: absolute; bottom: 12px; right: 28px; font-size: 13px; color: ' + (theme === 'dark' ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.6)') + '; text-align: right; line-height: 1.5; font-family: Outfit, sans-serif; font-weight: 500; z-index: 999;';
             watermark.innerHTML = "จัดทำโดย: ส่วนการตลาดและบริการลูกค้า สำนักงานไปรษณีย์เขต 6 (ทีม: ฮ.ฮูก ทีม)<br/>ข้อมูลที่ Capture ณ วันที่: " + timeStr;
-            // Overlay map with pre-captured canvas to prevent position shift
-            if (mapSnapshot) {
-              const clonedMapEl = clonedDoc.querySelector('.leaflet-container');
-              if (clonedMapEl) {
-                const overlay = clonedDoc.createElement('canvas');
-                overlay.width = mapSnapshot.width;
-                overlay.height = mapSnapshot.height;
-                overlay.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;z-index:99999;pointer-events:none;';
-                const ctx = overlay.getContext('2d');
-                ctx.drawImage(mapSnapshot, 0, 0);
-                const mapPane = clonedMapEl.querySelector('.leaflet-map-pane');
-                if (mapPane) mapPane.style.visibility = 'hidden';
-                clonedMapEl.style.position = 'relative';
-                clonedMapEl.appendChild(overlay);
-              }
-            }
+            
+            // Fix Leaflet Map Shifting
+            const mapPanes = clonedDoc.querySelectorAll('.leaflet-map-pane');
+            mapPanes.forEach(pane => {
+                 const transform = pane.style.transform;
+                 if (transform && transform !== 'none') {
+                     const match = transform.match(/translate3d\(([-0-9.]+)px,\s*([-0-9.]+)px/);
+                     if (match) {
+                         pane.style.transform = 'none';
+                         pane.style.left = match[1] + 'px';
+                         pane.style.top = match[2] + 'px';
+                     }
+                 }
+            });
 
-            // Attach watermark to dashboard container
-            const dashContainer = clonedDoc.querySelector('[data-dashboard-root]');
+            // Attach watermark to dashboard container correctly
+            const dashContainer = clonedDoc.getElementById('dashboard-root');
             if (dashContainer) {
                 dashContainer.style.position = 'relative';
                 dashContainer.style.paddingBottom = '3.5rem';
                 dashContainer.appendChild(watermark);
             } else {
-                clonedDoc.body.style.position = 'relative';
-                clonedDoc.body.appendChild(watermark);
+                // Fallback to appending to the cloned dashboardRef itself
+                const clonedRoot = clonedDoc.body.firstChild || clonedDoc.body;
+                if(clonedRoot) {
+                    clonedRoot.style.position = 'relative';
+                    clonedRoot.style.paddingBottom = '3.5rem';
+                    clonedRoot.appendChild(watermark);
+                }
             }
           }
         });
@@ -988,15 +985,6 @@ const Dashboard = () => {
       const now = new Date();
       const timeStr = now.toLocaleDateString('th-TH') + ' เวลา ' + now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) + ' น.';
       
-      // Pre-capture: snapshot map if this panel contains one
-      let mapSnapshot = null;
-      const mapEl = el.querySelector('.leaflet-container');
-      if (mapEl) {
-        try {
-          mapSnapshot = await html2canvas(mapEl, { scale: 2, useCORS: true, logging: false, backgroundColor: null });
-        } catch(e) { console.warn('Map pre-capture failed', e); }
-      }
-
       const canvas = await html2canvas(el, { 
         scale: 2, 
         useCORS: true, 
@@ -1005,22 +993,19 @@ const Dashboard = () => {
         onclone: (clonedDoc) => {
           const clonedEl = clonedDoc.querySelector('[data-panel-id="' + panelId + '"]');
           if (clonedEl) {
-            // Overlay map with pre-captured canvas if applicable
-            if (mapSnapshot) {
-              const clonedMapEl = clonedEl.querySelector('.leaflet-container');
-              if (clonedMapEl) {
-                const overlay = clonedDoc.createElement('canvas');
-                overlay.width = mapSnapshot.width;
-                overlay.height = mapSnapshot.height;
-                overlay.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;z-index:99999;pointer-events:none;';
-                const ctx = overlay.getContext('2d');
-                ctx.drawImage(mapSnapshot, 0, 0);
-                const mapPane = clonedMapEl.querySelector('.leaflet-map-pane');
-                if (mapPane) mapPane.style.visibility = 'hidden';
-                clonedMapEl.style.position = 'relative';
-                clonedMapEl.appendChild(overlay);
-              }
-            }
+            // Fix Leaflet Map Shifting
+            const mapPanes = clonedEl.querySelectorAll('.leaflet-map-pane');
+            mapPanes.forEach(pane => {
+                 const transform = pane.style.transform;
+                 if (transform && transform !== 'none') {
+                     const match = transform.match(/translate3d\(([-0-9.]+)px,\s*([-0-9.]+)px/);
+                     if (match) {
+                         pane.style.transform = 'none';
+                         pane.style.left = match[1] + 'px';
+                         pane.style.top = match[2] + 'px';
+                     }
+                 }
+            });
 
             clonedEl.style.position = 'relative';
             clonedEl.style.paddingBottom = '3.5rem';
@@ -1151,7 +1136,7 @@ const Dashboard = () => {
          </button>
       </div>
 
-      <div ref={dashboardRef} style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', gap: '1rem', paddingBottom: '3rem' }}>
+      <div id="dashboard-root" ref={dashboardRef} style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', gap: '1rem', paddingBottom: '3rem' }}>
       {maximizedPanel && theme === 'light' && (
         <style>{`
           div[data-panel-id="${maximizedPanel}"] { 
@@ -1312,7 +1297,7 @@ const Dashboard = () => {
                   </div>
                 </div>
                 <div style={{ flex: 1, borderRadius: '12px', overflow: 'hidden', background: 'var(--bg-panel)' }}>
-                  <MapContainer key={maximizedPanel === 'map' ? 'map-max' : 'map-min'} center={[16.2, 99.8]} zoom={6.5} style={{ height: '100%', width: '100%' }} zoomControl={false} scrollWheelZoom={false}>
+                  <MapContainer preferCanvas={true} key={maximizedPanel === 'map' ? 'map-max' : 'map-min'} center={[16.2, 99.8]} zoom={6.5} style={{ height: '100%', width: '100%' }} zoomControl={false} scrollWheelZoom={false}>
                     <TileLayer url={`https://{s}.basemaps.cartocdn.com/${theme === 'dark' ? 'dark_nolabels' : 'light_nolabels'}/{z}/{x}/{y}{r}.png`} />
                     {geoData && <GeoJSON key={activeTab + selectedYear + selectedMonth.join(',')} data={geoData} style={getProvinceStyle} onEachFeature={onEachFeature} />}
                   </MapContainer>
