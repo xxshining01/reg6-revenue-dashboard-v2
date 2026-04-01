@@ -436,20 +436,19 @@ const Dashboard = () => {
     const cacheTimeKey = 'dashboard_csv_time_' + dataSource;
     
     const processParsedData = (parsed) => {
-        // Dynamic YoY Computation: find actual from year - 1
-        const lookup = new Map();
-        parsed.forEach(r => {
-           const key = r.year + '|' + r.month + '|' + r.province + '|' + r.office + '|' + r.category;
-           lookup.set(key, (lookup.get(key) || 0) + r.actual);
-        });
-        
-        parsed.forEach(r => {
-           const prevKey = (r.year - 1) + '|' + r.month + '|' + r.province + '|' + r.office + '|' + r.category;
-           const dynamicPrev = lookup.get(prevKey) || 0;
-           if (dataSource === 'BI' || !r.prevActual) {
-               r.prevActual = dynamicPrev;
-           }
-        });
+        // Dynamic YoY Computation: only for BI mode (SAP already has raw prevActual)
+        if (dataSource === 'BI') {
+            const lookup = new Map();
+            parsed.forEach(r => {
+               const key = r.year + '|' + r.month + '|' + r.province + '|' + r.office + '|' + r.category + '|' + (r.businessGroup || '');
+               lookup.set(key, (lookup.get(key) || 0) + r.actual);
+            });
+            
+            parsed.forEach(r => {
+               const prevKey = (r.year - 1) + '|' + r.month + '|' + r.province + '|' + r.office + '|' + r.category + '|' + (r.businessGroup || '');
+               r.prevActual = lookup.get(prevKey) || 0;
+            });
+        }
         
         setRawData(parsed);
         const years = [...new Set(parsed.map(r => r.year))].sort((a,b) => b - a);
