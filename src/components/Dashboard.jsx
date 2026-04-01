@@ -545,8 +545,8 @@ const Dashboard = () => {
   useEffect(() => {
     if (!rawData.length) return;
     if (selectedProvince.length === 0) {
-      const targetProvincesTh = Object.values(PROVINCE_MAP_EN_TH);
-      const offices = [...new Set(rawData.filter(r => targetProvincesTh.includes(r.province)).map(r => r.office))].filter(Boolean).sort();
+
+      const offices = [...new Set(rawData.map(r => r.office))].filter(Boolean).sort();
       setAvailableOffices(offices);
     } else {
       const offices = [...new Set(rawData.filter(r => selectedProvince.includes(r.province)).map(r => r.office))].filter(Boolean).sort();
@@ -575,8 +575,8 @@ const Dashboard = () => {
     if (!rawData.length || !selectedYear) return { income: 0, expense: 0, profit: 0, incomeTarget: 0, expenseTarget: 0 };
     
     let base = rawData.filter(r => r.year === selectedYear);
-    const targetProvincesTh = Object.values(PROVINCE_MAP_EN_TH);
-    base = base.filter(r => targetProvincesTh.includes(r.province));
+
+
     
     if (selectedMonth.length > 0) base = base.filter(r => selectedMonth.includes(r.month));
     if (selectedProvince.length > 0) base = base.filter(r => selectedProvince.includes(r.province));
@@ -601,8 +601,8 @@ const Dashboard = () => {
     };
 
     let filtered = rawData.filter(r => r.year === selectedYear);
-    const targetProvincesTh = Object.values(PROVINCE_MAP_EN_TH);
-    filtered = filtered.filter(r => targetProvincesTh.includes(r.province));
+
+
 
     if (selectedMonth.length > 0) filtered = filtered.filter(r => selectedMonth.includes(r.month));
     if (selectedBG.length > 0) filtered = filtered.filter(r => selectedBG.includes(r.businessGroup));
@@ -618,7 +618,7 @@ const Dashboard = () => {
     const prevMonth = latestMonth - 1;
 
     // Filter rawData to get previous month actuals (bypass some filters for MoM comparison if needed, but respect others)
-    let preFiltered = rawData.filter(r => r.year === selectedYear && targetProvincesTh.includes(r.province) && r.category === targetCategory);
+    let preFiltered = rawData.filter(r => r.year === selectedYear && r.category === targetCategory);
     if (selectedBG.length > 0) preFiltered = preFiltered.filter(r => selectedBG.includes(r.businessGroup));
     if (selectedEVM.length > 0) preFiltered = preFiltered.filter(r => selectedEVM.includes(r.evmService));
     if (selectedProvince.length > 0) preFiltered = preFiltered.filter(r => selectedProvince.includes(r.province));
