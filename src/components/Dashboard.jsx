@@ -31,7 +31,9 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
 
-const SHEET_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQtmCb551xMV17lEECaAvPBySZ43zIrHT2jbz84udDmB9cvwiPYUmwogIdxranN_J3fheWXJZLrj2hV/pub?gid=1362457951&single=true&output=csv';
+const SAP_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQtmCb551xMV17lEECaAvPBySZ43zIrHT2jbz84udDmB9cvwiPYUmwogIdxranN_J3fheWXJZLrj2hV/pub?gid=1362457951&single=true&output=csv';
+const BI_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQtmCb551xMV17lEECaAvPBySZ43zIrHT2jbz84udDmB9cvwiPYUmwogIdxranN_J3fheWXJZLrj2hV/pub?gid=1298260188&single=true&output=csv';
+
 
 const COLORS = ['#0d9488', '#ec4899', '#f59e0b', '#3b82f6', '#ef4444', '#84cc16', '#8b5cf6'];
 const MONTH_NAMES = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
@@ -373,6 +375,7 @@ const Dashboard = () => {
 
   const [rawData, setRawData] = useState([]);
   const [showTrendMoM, setShowTrendMoM] = useState(false);
+  const [dataSource, setDataSource] = useState('BI'); // 'BI' or 'SAP'
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [geoData, setGeoData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -426,27 +429,27 @@ const Dashboard = () => {
     }
   };
 
-  const fetchData = () => {
+    const fetchData = (forceRefresh = false) => {
     setLoading(true); setError(null);
-    Papa.parse(SHEET_CSV_URL, {
-      download: true, header: true, skipEmptyLines: true,
-      complete: (results) => {
-        const parsed = results.data.map(row => ({
-          year: parseInt(row['ปี พ.ศ.']),
-          month: parseInt(row['Month']),
-          province: row['จังหวัด'],
-          office: row['ที่ทำการ'],
-          category: row['หมวดหมู่'],
-          businessGroup: (() => { 
-          let bgRaw = row['Business Group'] || 'อื่นๆ';
-          bgRaw = bgRaw.replace(/รายได้กลุ่มบริการ/g, '').replace(/รายได้กลุ่มธุรกิจ/g, '').replace(/ใช้จ่าย/g, '').trim();
-          if(!bgRaw) bgRaw = 'อื่นๆ';
- return bgRaw; })(),
-          evmService: row['EVM Service'],
-          actual: cleanNumber(row['ผลงานปีนี้']),
-          target: cleanNumber(row['เป้าหมาย']),
-          prevActual: cleanNumber(row['ผลงานปีก่อน'])
-        })).filter(r => !isNaN(r.year));
+    const targetUrl = dataSource === 'SAP' ? SAP_CSV_URL : BI_CSV_URL;
+    const cacheKey = 'dashboard_csv_cache_' + dataSource;
+    const cacheTimeKey = 'dashboard_csv_time_' + dataSource;
+    
+    const processParsedData = (parsed) => {
+        // Dynamic YoY Computation: find actual from year - 1
+        const lookup = new Map();
+        parsed.forEach(r => {
+           const key = r.year + '|' + r.month + '|' + r.province + '|' + r.office + '|' + r.category;
+           lookup.set(key, (lookup.get(key) || 0) + r.actual);
+        });
+        
+        parsed.forEach(r => {
+           const prevKey = (r.year - 1) + '|' + r.month + '|' + r.province + '|' + r.office + '|' + r.category;
+           const dynamicPrev = lookup.get(prevKey) || 0;
+           if (dataSource === 'BI' || !r.prevActual) {
+               r.prevActual = dynamicPrev;
+           }
+        });
         
         setRawData(parsed);
         const years = [...new Set(parsed.map(r => r.year))].sort((a,b) => b - a);
@@ -455,10 +458,10 @@ const Dashboard = () => {
         if (latestYear) setSelectedYear(latestYear);
 
         const targetProvincesTh = Object.values(PROVINCE_MAP_EN_TH);
-        const provinces = [...new Set(parsed.map(r => r.province))].filter(p => targetProvincesTh.includes(p)).sort();
+        const provinces = [...new Set(parsed.map(r => r.province))].filter(Boolean).filter(p => targetProvincesTh.includes(p)).sort();
         setAvailableProvinces(provinces);
-        setAvailableBGs([...new Set(parsed.map(r => r.businessGroup))].sort());
-        setAvailableEVMs([...new Set(parsed.map(r => r.evmService))].sort());
+        setAvailableBGs([...new Set(parsed.map(r => r.businessGroup))].filter(Boolean).filter(b => b !== 'อื่นๆ').sort());
+        setAvailableEVMs([...new Set(parsed.map(r => r.evmService))].filter(Boolean).filter(e => e !== 'อื่นๆ').sort());
 
         if (latestYear) {
           const incomeRows = parsed.filter(r => r.year === latestYear && r.category === 'รายได้' && r.actual > 0 && r.month >= 1 && r.month <= 12);
@@ -467,10 +470,67 @@ const Dashboard = () => {
             setSelectedMonth(Array.from({ length: latestMonth }, (_, i) => i + 1));
           }
         }
-
         setLoading(false);
+    };
+
+    if (forceRefresh !== true) {
+      const cachedTime = sessionStorage.getItem(cacheTimeKey);
+      if (cachedTime && (Date.now() - parseInt(cachedTime)) < 30 * 60 * 1000) {
+        const cachedData = sessionStorage.getItem(cacheKey);
+        if (cachedData) {
+           try {
+              processParsedData(JSON.parse(cachedData));
+              return; // skip fetching
+           } catch (e) {
+              console.warn("Cache parse error", e);
+           }
+        }
+      }
+    }
+
+    Papa.parse(targetUrl, {
+      download: true, header: true, skipEmptyLines: true, worker: true,
+      complete: (results) => {
+        let parsed = [];
+        if (dataSource === 'SAP') {
+            parsed = results.data.map(row => ({
+                year: parseInt(row['ปี พ.ศ.']),
+                month: parseInt(row['Month']),
+                province: row['จังหวัด'],
+                office: row['ที่ทำการ'],
+                category: row['หมวดหมู่'],
+                businessGroup: (() => { 
+                let bgRaw = row['Business Group'] || 'อื่นๆ';
+                bgRaw = bgRaw.replace(/รายได้กลุ่มบริการ/g, '').replace(/รายได้กลุ่มธุรกิจ/g, '').replace(/ใช้จ่าย/g, '').trim();
+                if(!bgRaw) bgRaw = 'อื่นๆ';
+                return bgRaw; })(),
+                evmService: row['EVM Service'],
+                actual: cleanNumber(row['ผลงานปีนี้']),
+                target: cleanNumber(row['เป้าหมาย']),
+                prevActual: cleanNumber(row['ผลงานปีก่อน'])
+            })).filter(r => !isNaN(r.year));
+        } else {
+            parsed = results.data.map(row => ({
+                year: parseInt(row['ปี']),
+                month: parseInt(row['เดือน']),
+                province: row['จังหวัด'],
+                office: row['ที่ทำการ'],
+                category: row['หมวดหมู่'],
+                businessGroup: 'อื่นๆ',
+                evmService: 'อื่นๆ',
+                actual: cleanNumber(row['ผลงาน']),
+                target: cleanNumber(row['เป้าหมาย']),
+                prevActual: 0
+            })).filter(r => !isNaN(r.year));
+        }
+
+        try {
+           sessionStorage.setItem(cacheKey, JSON.stringify(parsed));
+           sessionStorage.setItem(cacheTimeKey, Date.now().toString());
+        } catch(e) { console.warn('sessionStorage full'); }
+        processParsedData(parsed);
       },
-      error: () => { setLoading(false); setError("ไม่สามารถดึงข้อมูลจาก Google Sheets ได้"); }
+      error: () => { setLoading(false); setError("ไม่สามารถดึงข้อมูลได้"); }
     });
   };
 
@@ -480,7 +540,8 @@ const Dashboard = () => {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  useEffect(() => { fetchData(); fetchGeoJSON(); }, []);
+  useEffect(() => { fetchData(); }, [dataSource]);
+  useEffect(() => { fetchGeoJSON(); }, []);
 
   useEffect(() => {
     if (!rawData.length) return;
@@ -1117,9 +1178,21 @@ const Dashboard = () => {
 
   return (
     <>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', padding: '1.5rem 1.75rem 0.75rem', maxWidth: '100%', boxSizing: 'border-box' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1.5rem 1.75rem 0.75rem', maxWidth: '100%', boxSizing: 'border-box' }}>
+         {/* DataSource Toggle */}
+         <div style={{ display: 'flex', background: 'var(--bg-panel)', padding: '0.25rem', borderRadius: '12px', border: '1px solid var(--line-color)' }}>
+            <button
+               onClick={() => setDataSource('BI')}
+               style={{ padding: '0.5rem 1.5rem', borderRadius: '8px', border: 'none', background: dataSource === 'BI' ? themeColor : 'transparent', color: dataSource === 'BI' ? '#fff' : 'var(--text-secondary)', fontWeight: '600', cursor: 'pointer', transition: 'all 0.2s', fontSize: '0.9rem' }}
+            >BI</button>
+            <button
+               onClick={() => setDataSource('SAP')}
+               style={{ padding: '0.5rem 1.5rem', borderRadius: '8px', border: 'none', background: dataSource === 'SAP' ? themeColor : 'transparent', color: dataSource === 'SAP' ? '#fff' : 'var(--text-secondary)', fontWeight: '600', cursor: 'pointer', transition: 'all 0.2s', fontSize: '0.9rem' }}
+            >SAP</button>
+         </div>
+         <div style={{ display: 'flex', gap: '0.75rem' }}>
          <button
-           onClick={fetchData} disabled={loading}
+           onClick={() => fetchData(true)} disabled={loading}
             style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.6rem 1.25rem', borderRadius: '9999px', background: theme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)', color: theme === 'dark' ? '#ffffff' : '#1e293b', cursor: loading ? 'not-allowed' : 'pointer', fontWeight: '600', fontSize: '0.95rem', transition: 'all 0.3s', opacity: loading ? 0.7 : 1, backdropFilter: 'blur(8px)', border: theme === 'dark' ? '1px solid rgba(255,255,255,0.15)' : '1px solid rgba(0,0,0,0.15)' }}
             onMouseOver={(e) => { if (!loading) { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.background = theme === 'dark' ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)'; } }}
             onMouseOut={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.background = theme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'; }}
@@ -1134,6 +1207,7 @@ const Dashboard = () => {
          >
            <Camera size={20} strokeWidth={2.5} /> Capture รายงาน
          </button>
+         </div>
       </div>
 
       <div id="dashboard-root" ref={dashboardRef} style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', gap: '1rem', paddingBottom: '3rem' }}>
@@ -1208,7 +1282,7 @@ const Dashboard = () => {
       ) : processed && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           
-          {/* AI Daily Insights */}
+          {/* AI Insights */}
           <div className="glass-panel" style={{ 
             background: 'linear-gradient(90deg, rgba(59, 130, 246, 0.15) 0%, rgba(139, 92, 246, 0.15) 100%)', 
             border: '1px solid rgba(139, 92, 246, 0.3)', 
@@ -1223,7 +1297,7 @@ const Dashboard = () => {
             </div>
             <div style={{ flex: 1 }}>
                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem' }}>
-                  <h3 style={{ fontSize: '1.15rem', fontWeight: '700', color: 'var(--text-primary)', margin: 0 }}>AI Daily Insights</h3>
+                  <h3 style={{ fontSize: '1.15rem', fontWeight: '700', color: 'var(--text-primary)', margin: 0 }}>AI Insights</h3>
                   <span style={{ fontSize: '0.75rem', background: 'rgba(255,255,255,0.15)', color: 'var(--text-secondary)', padding: '2px 8px', borderRadius: '12px', fontWeight: '500' }}>บทวิเคราะห์โดย AI</span>
                </div>
                <div style={{ margin: 0, color: 'var(--text-primary)', lineHeight: '1.6', fontSize: '0.95rem', width: '100%' }}>
@@ -1304,8 +1378,9 @@ const Dashboard = () => {
                 </div>
              </div>
              
-             {/* Business Group Doughnut */}
-             <BusinessGroupDoughnut
+             {dataSource === 'SAP' && (<>
+{/* Business Group Doughnut */}
+<BusinessGroupDoughnut
                 data={processed?.hierarchicalData}
                 maximizedPanel={maximizedPanel}
                 setMaximizedPanel={setMaximizedPanel}
@@ -1322,6 +1397,7 @@ const Dashboard = () => {
                   exportXLSX(rows, 'business-group-summary.xlsx');
                 }}
               />
+</>)}
           </div>
 
                 {/* Maximize Overlay Backdrop */}
@@ -1480,6 +1556,7 @@ const Dashboard = () => {
               onClick={(maximizedPanel === 'drillBG' || maximizedPanel === 'drillLoc') ? () => setMaximizedPanel(null) : undefined}
             >
                 
+                {dataSource === 'SAP' && (<>
                 {/* Hierarchical Breakdown (Business Group -> EVM Service) */}
                 <div data-panel-id="drillBG" className="glass-panel" style={maximizedPanel === 'drillBG' ? { display: 'flex', flexDirection: 'column', padding: '2rem', height: 'auto' } : (maximizedPanel === 'drillLoc' ? { display: 'none' } : { padding: '1.5rem', display: 'flex', flexDirection: 'column', minHeight: '300px' })} onClick={maximizedPanel === 'drillBG' ? (e => e.stopPropagation()) : undefined}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexShrink: 0 }}>
@@ -1570,6 +1647,7 @@ const Dashboard = () => {
                     </div>
                 </div>
 
+                </>)} 
                 {/* Hierarchical Breakdown (Province -> Office) with Proportions*/}
                 <div data-panel-id="drillLoc" className="glass-panel" style={maximizedPanel === 'drillLoc' ? { display: 'flex', flexDirection: 'column', padding: '2rem', height: 'auto' } : (maximizedPanel === 'drillBG' ? { display: 'none' } : { padding: '1.5rem', display: 'flex', flexDirection: 'column', minHeight: '300px' })} onClick={maximizedPanel === 'drillLoc' ? (e => e.stopPropagation()) : undefined}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexShrink: 0 }}>
