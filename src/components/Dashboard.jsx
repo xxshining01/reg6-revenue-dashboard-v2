@@ -130,19 +130,28 @@ const MultiSelect = ({ options, selected, onChange, placeholder, disabled, style
   );
 };
 
+// Centralized 5-tier color function for percentage thresholds
+// Red: <70%% | Orange: >=70%% & <90%% | Yellow: >=90%% & <100%% | Light Green: >=100%% & <110%% | Dark Green: >=110%%
+const getPercentColor = (pct, isIncome = true) => {
+  if (isIncome) {
+    if (pct < 70) return '#ef4444';
+    if (pct < 90) return '#f97316';
+    if (pct < 100) return '#facc15';
+    if (pct < 110) return '#4ade80';
+    return '#16a34a';
+  } else {
+    if (pct > 110) return '#ef4444';
+    if (pct > 100) return '#f97316';
+    if (pct > 90) return '#facc15';
+    if (pct > 70) return '#4ade80';
+    return '#16a34a';
+  }
+};
+
 const GaugeChart = ({ title, actual, target, isIncome, theme, label="เป้าหมาย" }) => {
   const pct = target > 0 ? (actual / target) * 100 : 0;
   
-  let color = '#3b82f6';
-  if (isIncome) {
-    if (pct >= 100) color = '#10b981';
-    else if (pct >= 80) color = '#facc15';
-    else color = '#ef4444';
-  } else {
-    if (pct <= 100) color = '#10b981';
-    else if (pct <= 110) color = '#facc15';
-    else color = '#ef4444';
-  }
+  const color = getPercentColor(pct, isIncome);
 
   const displayPct = Math.min(pct, 100);
   const data = [
@@ -741,7 +750,7 @@ const Dashboard = () => {
 
     const actStr = formatAmt(processed.totals.actual);
     const typeStr = isIncome ? "รายได้" : "ค่าใช้จ่าย";
-    const pct = processed.totals.target > 0 ? (processed.totals.actual / processed.totals.target) * 100 : 0;
+    const pct = processed.totals.target !== 0 ? (processed.totals.actual / processed.totals.target) * 100 : 0;
     
     // Highlight wrapper
     const h = (text) => <b style={{color: themeColor, fontWeight: 700}}>{text}</b>;
@@ -937,8 +946,8 @@ const Dashboard = () => {
       if (config.key === 'name') return config.dir === 'asc' ? a.name.localeCompare(b.name, 'th') : b.name.localeCompare(a.name, 'th');
       if (config.key === 'actual') { valA = a.actual; valB = b.actual; }
       else if (config.key === 'pct') { valA = a.target > 0 ? a.actual / a.target : 0; valB = b.target > 0 ? b.actual / b.target : 0; }
-      else if (config.key === 'yoy') { valA = a.prev > 0 ? (a.actual - a.prev) / a.prev : -999; valB = b.prev > 0 ? (b.actual - b.prev) / b.prev : -999; }
-      else if (config.key === 'mom') { valA = a.prevMoActual > 0 ? (a.currMoActual - a.prevMoActual) / a.prevMoActual : -999; valB = b.prevMoActual > 0 ? (b.currMoActual - b.prevMoActual) / b.prevMoActual : -999; }
+      else if (config.key === 'yoy') { valA = a.prev !== 0 ? (a.actual - a.prev) / a.prev : -999; valB = b.prev !== 0 ? (b.actual - b.prev) / b.prev : -999; }
+      else if (config.key === 'mom') { valA = a.prevMoActual !== 0 ? (a.currMoActual / a.prevMoActual) * 100 : -999; valB = b.prevMoActual !== 0 ? (b.currMoActual / b.prevMoActual) * 100 : -999; }
       return config.dir === 'asc' ? valA - valB : valB - valA;
     });
   };
@@ -947,19 +956,31 @@ const Dashboard = () => {
     if (watchlistTab === 'target') {
       if (item.target <= 0) return null;
       const pct = (item.actual / item.target) * 100;
-      if (pct < 70) return { label: 'ติดตามเร่งด่วน', sub: '(< 70%)', val: pct, c: '#ef4444' };
-      if (pct < 90) return { label: 'เฝ้าระวัง ติดตามอย่างใกล้ชิด', sub: '(70% - 89.9%)', val: pct, c: '#f97316' };
-      if (pct < 100) return { label: 'กลุ่มเสริมทัพเร่งบูรณาการ', sub: '(90% - 99.9%)', val: pct, c: '#facc15' };
+      if (isIncome) {
+        if (pct < 70) return { label: 'ติดตามเร่งด่วน', sub: '(< 70%)', val: pct, c: '#ef4444' };
+        if (pct < 90) return { label: 'เฝ้าระวัง ติดตามอย่างใกล้ชิด', sub: '(70% - 89.9%)', val: pct, c: '#f97316' };
+        if (pct < 100) return { label: 'กลุ่มเสริมทัพเร่งบูรณาการ', sub: '(90% - 99.9%)', val: pct, c: '#facc15' };
+      } else {
+        if (pct > 110) return { label: 'ติดตามเร่งด่วน', sub: '(> 110%)', val: pct, c: '#ef4444' };
+        if (pct > 100) return { label: 'เฝ้าระวัง ติดตามอย่างใกล้ชิด', sub: '(100.1% - 110%)', val: pct, c: '#f97316' };
+        if (pct > 90) return { label: 'กลุ่มเสริมทัพเร่งบูรณาการ', sub: '(90.1% - 100%)', val: pct, c: '#facc15' };
+      }
       return null;
     } else {
-      if (item.prev <= 0) return null;
+      if (item.prev === 0) return null;
       const yoy = (item.actual / item.prev) * 100;
-      if (yoy <= 70) return { label: 'ติดตามเร่งด่วน', sub: '(ทำได้ต่ำกว่า 70% YoY)', val: yoy, c: '#ef4444' };
-      if (yoy <= 90) return { label: 'เฝ้าระวัง ติดตามอย่างใกล้ชิด', sub: '(ทำได้ 70% - 89.9% YoY)', val: yoy, c: '#f97316' };
-      if (yoy < 100) return { label: 'กลุ่มเสริมทัพเร่งบูรณาการ', sub: '(ทำได้ 90% - 99.9% YoY)', val: yoy, c: '#facc15' };
+      if (isIncome) {
+        if (yoy < 70) return { label: 'ติดตามเร่งด่วน', sub: '(ทำได้ต่ำกว่า 70% YoY)', val: yoy, c: '#ef4444' };
+        if (yoy < 90) return { label: 'เฝ้าระวัง ติดตามอย่างใกล้ชิด', sub: '(ทำได้ 70% - 89.9% YoY)', val: yoy, c: '#f97316' };
+        if (yoy < 100) return { label: 'กลุ่มเสริมทัพเร่งบูรณาการ', sub: '(ทำได้ 90% - 99.9% YoY)', val: yoy, c: '#facc15' };
+      } else {
+        if (yoy > 110) return { label: 'ติดตามเร่งด่วน', sub: '(ทำได้เกิน 110% YoY)', val: yoy, c: '#ef4444' };
+        if (yoy > 100) return { label: 'เฝ้าระวัง ติดตามอย่างใกล้ชิด', sub: '(ทำได้ 100.1% - 110% YoY)', val: yoy, c: '#f97316' };
+        if (yoy > 90) return { label: 'กลุ่มเสริมทัพเร่งบูรณาการ', sub: '(ทำได้ 90.1% - 100% YoY)', val: yoy, c: '#facc15' };
+      }
       return null;
     }
-  }, [watchlistTab]);
+  }, [watchlistTab, isIncome]);
 
   const watchlistData = useMemo(() => {
     if (!processed || !processed.hierarchicalLocationData) return [];
@@ -981,14 +1002,7 @@ const Dashboard = () => {
     if (!data || data.target === 0) return { fillColor: theme === 'light' ? '#e2e8f0' : '#333', weight: 1, opacity: 1, color: '#000', fillOpacity: 0.7 };
 
     const pct = (data.actual / data.target) * 100;
-    
-    let fillColor = '#333';
-    const isGood = isIncome ? pct >= 100 : pct <= 100;
-    const isWarning = isIncome ? (pct >= 80 && pct < 100) : (pct > 100 && pct <= 110);
-
-    if (isGood) fillColor = '#10b981';
-    else if (isWarning) fillColor = '#facc15';
-    else fillColor = '#ef4444';
+    const fillColor = getPercentColor(pct, isIncome);
 
     const isTargetProv = selectedProvince.length === 0 || selectedProvince.includes(thName);
     return { fillColor, weight: 1, opacity: 1, color: theme === 'light' ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.2)', fillOpacity: isTargetProv ? 0.8 : 0.2 };
@@ -1059,11 +1073,7 @@ const Dashboard = () => {
   const getPerfColor = (actual, target) => {
      if(target === 0) return 'var(--text-secondary)';
      const pct = (actual / target) * 100;
-     const isGood = isIncome ? pct >= 100 : pct <= 100;
-     const isWarn = isIncome ? (pct >= 80 && pct < 100) : (pct > 100 && pct <= 110);
-     if(isGood) return '#10b981';
-     if(isWarn) return '#facc15';
-     return '#ef4444';
+     return getPercentColor(pct, isIncome);
   };
 
   const MiniBar = ({ pct }) => (
@@ -1655,8 +1665,8 @@ const Dashboard = () => {
                                   </div>
                                   <div style={{ textAlign: 'right', fontWeight: 'bold' }}><span title={bg.actual.toLocaleString()}>{formatAmt(bg.actual)}</span></div>
                                   <div style={{ textAlign: 'right', fontWeight: 'bold', color: getPerfColor(bg.actual, bg.target) }}>{bg.target > 0 ? Math.round(pct) + '%' : '-'}</div>
-                                  <div style={{ textAlign: 'right', fontWeight: 'bold', color: bg.prev > 0 && ((bg.actual / bg.prev)*100) >= 100 ? '#10b981' : '#ef4444' }}>
-                                    {bg.prev > 0 ? ((bg.actual / bg.prev)*100).toFixed(1) + '%' : '-'}
+                                  <div style={{ textAlign: 'right', fontWeight: 'bold', color: bg.prev !== 0 ? getPercentColor((bg.actual / bg.prev)*100, isIncome) : 'var(--text-secondary)' }}>
+                                    {bg.prev !== 0 ? ((bg.actual / bg.prev)*100).toFixed(1) + '%' : '-'}
                                   </div>
                                   
                                </div>
@@ -1673,8 +1683,8 @@ const Dashboard = () => {
                                             </div>
                                             <div style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>{formatFullAmt(evm.actual)}</div>
                                             <div style={{ textAlign: 'right', color: getPerfColor(evm.actual, evm.target) }}>{evm.target > 0 ? Math.round(evmPct) + '%' : '-'}</div>
-                                            <div style={{ textAlign: 'right', color: evm.prev > 0 && ((evm.actual / evm.prev)*100) >= 100 ? '#10b981' : '#ef4444' }}>
-                                              {evm.prev > 0 ? ((evm.actual / evm.prev)*100).toFixed(1) + '%' : '-'}
+                                            <div style={{ textAlign: 'right', color: evm.prev !== 0 ? getPercentColor((evm.actual / evm.prev)*100, isIncome) : 'var(--text-secondary)' }}>
+                                              {evm.prev !== 0 ? ((evm.actual / evm.prev)*100).toFixed(1) + '%' : '-'}
                                             </div>
                                             
                                          </div>
@@ -1739,7 +1749,7 @@ const Dashboard = () => {
                                   </div>
                                   <div style={{ textAlign: 'right', fontWeight: 'bold', fontSize: '0.9rem' }}><span title={prov.actual.toLocaleString()}>{formatAmt(prov.actual)}</span></div>
                                   <div style={{ textAlign: 'right', fontWeight: 'bold', fontSize: '0.9rem', color: getPerfColor(prov.actual, prov.target) }}>{prov.target > 0 ? Math.round(pct) + '%' : '-'}</div>
-                                  <div style={{ textAlign: 'right', fontWeight: 'bold', fontSize: '0.9rem', color: prov.prev > 0 && ((prov.actual / prov.prev)*100) >= 100 ? '#10b981' : '#ef4444' }}>{prov.prev > 0 ? ((prov.actual / prov.prev)*100).toFixed(1) + '%' : '-'}</div>
+                                  <div style={{ textAlign: 'right', fontWeight: 'bold', fontSize: '0.9rem', color: prov.prev !== 0 ? getPercentColor((prov.actual / prov.prev)*100, isIncome) : 'var(--text-secondary)' }}>{prov.prev !== 0 ? ((prov.actual / prov.prev)*100).toFixed(1) + '%' : '-'}</div>
                                   
                                </div>
 
@@ -1756,7 +1766,7 @@ const Dashboard = () => {
                                             </div>
                                             <div style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>{formatFullAmt(office.actual)}</div>
                                             <div style={{ textAlign: 'right', color: getPerfColor(office.actual, office.target) }}>{office.target > 0 ? Math.round(officePct) + '%' : '-'}</div>
-                                            <div style={{ textAlign: 'right', color: office.prev > 0 && ((office.actual / office.prev)*100) >= 100 ? '#10b981' : '#ef4444' }}>{office.prev > 0 ? ((office.actual / office.prev)*100).toFixed(1) + '%' : '-'}</div>
+                                            <div style={{ textAlign: 'right', color: office.prev !== 0 ? getPercentColor((office.actual / office.prev)*100, isIncome) : 'var(--text-secondary)' }}>{office.prev !== 0 ? ((office.actual / office.prev)*100).toFixed(1) + '%' : '-'}</div>
                                             
                                          </div>
                                       )
@@ -1820,7 +1830,7 @@ const Dashboard = () => {
                                 {prov.matchingOffices.map((o, oidx) => {
                                    const oc = o.watchStatus.c;
                                    const pctVal = o.target > 0 ? ((o.actual/o.target)*100).toFixed(1) : '-';
-                                   const yoyVal = o.prev > 0 ? ((o.actual / o.prev) * 100).toFixed(1) : '-';
+                                   const yoyVal = o.prev !== 0 ? ((o.actual / o.prev) * 100).toFixed(1) : '-';
                                    return (
                                      <div key={'woff-' + oidx} style={{ padding: '0.4rem 0.25rem', borderBottom: oidx !== prov.matchingOffices.length - 1 ? '1px dashed var(--line-color-faint)' : 'none' }}>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.2rem' }}>
@@ -1830,7 +1840,7 @@ const Dashboard = () => {
                                         <div style={{ fontSize: '0.68rem', color: oc }}>{o.watchStatus.label}</div>
                                         <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.2rem' }}>
                                            <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>Achieved: <b style={{ color: 'var(--text-primary)' }}>{pctVal}%</b></span>
-                                           <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>YoY: <b style={{ color: yoyVal !== '-' && parseFloat(yoyVal) < 100 ? '#ef4444' : '#10b981' }}>{yoyVal !== '-' ? yoyVal + '%' : '-'}</b></span>
+                                           <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>YoY: <b style={{ color: yoyVal !== '-' ? getPercentColor(parseFloat(yoyVal), isIncome) : 'var(--text-secondary)' }}>{yoyVal !== '-' ? yoyVal + '%' : '-'}</b></span>
                                         </div>
                                      </div>
                                    );
