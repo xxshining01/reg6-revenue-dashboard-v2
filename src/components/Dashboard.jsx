@@ -172,7 +172,7 @@ const GaugeChart = ({ title, actual, target, isIncome, theme }) => {
           </PieChart>
         </ResponsiveContainer>
         <div style={{ position: 'absolute', bottom: '15px', left: '0', right: '0', textAlign: 'center' }}>
-          <div style={{ fontSize: '2rem', fontWeight: '700', color: target > 0 ? color : 'var(--text-secondary)', lineHeight: '1' }}>{target > 0 ? `${pct.toFixed(1)}%` : 'N/A'}</div>
+          <div style={{ fontSize: '2rem', fontWeight: '700', color: target > 0 ? color : 'var(--text-secondary)', lineHeight: '1' }}>{target > 0 ? `${pct.toFixed(1)}%` : '-'}</div>
         </div>
       </div>
       <div style={{ marginTop: '1rem', fontSize: '0.8rem', color: 'var(--text-secondary)', textAlign: 'center' }}>
@@ -793,7 +793,7 @@ const Dashboard = () => {
           driversStr = <>กลุ่มธุรกิจที่ส่งผลกระทบต่อ{typeStr}มากที่สุดคือ {h(maxBGName)} โดยเฉพาะจากบริการ {h(maxEVMName)} ซึ่งคิดเป็นสัดส่วนถึง {h(maxBGPct.toFixed(1) + "%")} ของยอดรวมในหมวดนี้</>;
       }
     } else {
-      driversStr = <>({h("อ้างอิงและประเมินผลงานหลักจากพื้นที่/ที่ทำการ")} เนื่องจากโครงสร้างข้อมูล BI ไม่มีรายละเอียดระดับบริการและกลุ่มธุรกิจ)</>;
+      driversStr = null;
     }
 
     // 2.3 Location Insights
@@ -809,12 +809,14 @@ const Dashboard = () => {
         const topOfficeName = provs[0].offices && provs[0].offices.length > 0 ? provs[0].offices[0].name : "";
         let bestText = topOfficeName ? topOfficeName : `จังหวัด${topProvName}`;
         
-        provs.sort((a,b) => {
+        let validProvs = provs.filter(p => p.target > 0);
+        if (validProvs.length === 0) validProvs = provs; // safe fallback
+        validProvs.sort((a,b) => {
             const aGap = isIncome ? a.target - a.actual : a.actual - a.target;
             const bGap = isIncome ? b.target - b.actual : b.actual - b.target;
             return bGap - aGap; 
         });
-        const worstProv = provs[0];
+        const worstProv = validProvs[0];
         const worstOffName = worstProv.offices && worstProv.offices.length > 0 ? worstProv.offices[0].name : `จังหวัด${worstProv.name}`;
 
         const topVerb = isIncome ? "รายได้สูงสุด" : "บริหารค่าใช้จ่ายได้ดีสุด";
@@ -943,16 +945,18 @@ const Dashboard = () => {
 
   const getWatchlistLevel = React.useCallback((item) => {
     if (watchlistTab === 'target') {
-      const pct = item.target > 0 ? (item.actual / item.target) * 100 : 0;
+      if (item.target <= 0) return null;
+      const pct = (item.actual / item.target) * 100;
       if (pct < 70) return { label: 'ติดตามเร่งด่วน', sub: '(< 70%)', val: pct, c: '#ef4444' };
       if (pct < 90) return { label: 'เฝ้าระวัง ติดตามอย่างใกล้ชิด', sub: '(70% - 89.9%)', val: pct, c: '#f97316' };
       if (pct < 100) return { label: 'กลุ่มเสริมทัพเร่งบูรณาการ', sub: '(90% - 99.9%)', val: pct, c: '#facc15' };
       return null;
     } else {
-      const yoy = item.prev > 0 ? ((item.actual - item.prev) / item.prev) * 100 : 0;
-      if (yoy <= -30) return { label: 'ติดตามเร่งด่วน', sub: '(YoY ลดลง >= 30%)', val: yoy, c: '#ef4444' };
-      if (yoy <= -10) return { label: 'เฝ้าระวัง ติดตามอย่างใกล้ชิด', sub: '(YoY ลดลง 10% ถึง 29.9%)', val: yoy, c: '#f97316' };
-      if (yoy < 0) return { label: 'กลุ่มเสริมทัพเร่งบูรณาการ', sub: '(YoY ลดลง < 10%)', val: yoy, c: '#facc15' };
+      if (item.prev <= 0) return null;
+      const yoy = (item.actual / item.prev) * 100;
+      if (yoy <= 70) return { label: 'ติดตามเร่งด่วน', sub: '(ทำได้ต่ำกว่า 70% YoY)', val: yoy, c: '#ef4444' };
+      if (yoy <= 90) return { label: 'เฝ้าระวัง ติดตามอย่างใกล้ชิด', sub: '(ทำได้ 70% - 89.9% YoY)', val: yoy, c: '#f97316' };
+      if (yoy < 100) return { label: 'กลุ่มเสริมทัพเร่งบูรณาการ', sub: '(ทำได้ 90% - 99.9% YoY)', val: yoy, c: '#facc15' };
       return null;
     }
   }, [watchlistTab]);
@@ -998,7 +1002,7 @@ const Dashboard = () => {
     const centroid = getFeatureCentroid(feature);
 
     if (data) {
-      const pct = data.target > 0 ? ((data.actual / data.target) * 100).toFixed(1) : 0;
+      const pct = data.target > 0 ? ((data.actual / data.target) * 100).toFixed(1) : '-';
       const abbrev = data.actual >= 1e6 ? (data.actual/1e6).toFixed(1)+'M' : data.actual >= 1e3 ? (data.actual/1e3).toFixed(0)+'K' : data.actual.toFixed(0);
       
       const labelHtml = `<div style="text-align:center;color:#fff;text-shadow:-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000,0 1px 3px rgba(0,0,0,0.8);font-weight:800;font-size:11px;line-height:1;pointer-events:none;">${thName}<br/><span style="font-size:9px;opacity:0.95;">${abbrev}</span></div>`;
@@ -1396,7 +1400,7 @@ const Dashboard = () => {
                             'ที่ทำการ': o.name,
                             'ผลงานจริง': o.actual,
                             'เป้าหมาย': o.target,
-                            '% สำเร็จ': o.target > 0 ? +((o.actual / o.target) * 100).toFixed(1) : 'N/A'
+                            '% สำเร็จ': o.target > 0 ? +((o.actual / o.target) * 100).toFixed(1) : '-'
                           }))
                         );
                         exportXLSX(rows, 'province-map-data.xlsx');
@@ -1426,8 +1430,8 @@ const Dashboard = () => {
                     'กลุ่มธุรกิจ': bg.name,
                     'ผลงานจริง': bg.actual,
                     'เป้าหมาย': bg.target,
-                    '% สำเร็จ': bg.target > 0 ? +((bg.actual / bg.target) * 100).toFixed(1) : 'N/A',
-                    '% ของรวม': total > 0 ? +((bg.actual / total) * 100).toFixed(1) : 0
+                    '% สำเร็จ': bg.target > 0 ? +((bg.actual / bg.target) * 100).toFixed(1) : '-',
+                    '% ของรวม': total > 0 ? +((bg.actual / total) * 100).toFixed(1) : '-'
                   }));
                   exportXLSX(rows, 'business-group-summary.xlsx');
                 }}
@@ -1572,7 +1576,7 @@ const Dashboard = () => {
                 </div>
                 <div style={{ flex: 1, minHeight: 0 }}>
                   <ResponsiveContainer width="100%" height="100%">
-                    <ComposedChart data={showTrendMoM ? processed.monthlyData.map((d,i,a) => ({...d, momStr: i>0 && a[i-1].actual>0 ? (((d.actual - a[i-1].actual)/a[i-1].actual)*100 > 0 ? '+' : '') + (((d.actual - a[i-1].actual)/a[i-1].actual)*100).toFixed(1) + '%' : ''})) : processed.monthlyData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                    <ComposedChart data={showTrendMoM ? processed.monthlyData.map((d,i,a) => ({...d, momStr: i>0 && a[i-1].actual>0 ?((d.actual / a[i-1].actual)*100).toFixed(1) + '%' : ''})) : processed.monthlyData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke={theme === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'} vertical={false} />
                       <XAxis dataKey="name" stroke={theme === 'dark' ? '#a1a1aa' : '#475569'} tick={{ fill: theme === 'dark' ? '#a1a1aa' : '#475569', fontSize: 11 }} axisLine={false} tickLine={false} />
                       <YAxis stroke={theme === 'dark' ? '#a1a1aa' : '#475569'} tick={{ fill: theme === 'dark' ? '#a1a1aa' : '#475569', fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={formatAmt} />
@@ -1608,7 +1612,7 @@ const Dashboard = () => {
                                  'EVM Service': evm.name,
                                  'ผลงานจริง': evm.actual,
                                  'เป้าหมาย': evm.target,
-                                 '% สำเร็จ': evm.target > 0 ? +((evm.actual / evm.target) * 100).toFixed(1) : 'N/A'
+                                 '% สำเร็จ': evm.target > 0 ? +((evm.actual / evm.target) * 100).toFixed(1) : '-'
                                }))
                              );
                              exportXLSX(rows, 'business-group-detail.xlsx');
@@ -1652,7 +1656,7 @@ const Dashboard = () => {
                                   <div style={{ textAlign: 'right', fontWeight: 'bold' }}><span title={bg.actual.toLocaleString()}>{formatAmt(bg.actual)}</span></div>
                                   <div style={{ textAlign: 'right', fontWeight: 'bold', color: getPerfColor(bg.actual, bg.target) }}>{pct.toFixed(0)}%</div>
                                   <div style={{ textAlign: 'right', fontWeight: 'bold', color: bg.prev > 0 && (((bg.actual - bg.prev)/bg.prev)*100) >= 0 ? '#10b981' : '#ef4444' }}>
-                                    {bg.prev > 0 ? (((bg.actual - bg.prev)/bg.prev)*100).toFixed(1) + '%' : 'N/A'}
+                                    {bg.prev > 0 ? ((bg.actual / bg.prev)*100).toFixed(1) + '%' : '-'}
                                   </div>
                                   
                                </div>
@@ -1670,7 +1674,7 @@ const Dashboard = () => {
                                             <div style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>{formatFullAmt(evm.actual)}</div>
                                             <div style={{ textAlign: 'right', color: getPerfColor(evm.actual, evm.target) }}>{evmPct.toFixed(0)}%</div>
                                             <div style={{ textAlign: 'right', color: evm.prev > 0 && (((evm.actual - evm.prev)/evm.prev)*100) >= 0 ? '#10b981' : '#ef4444' }}>
-                                              {evm.prev > 0 ? (((evm.actual - evm.prev)/evm.prev)*100).toFixed(1) + '%' : 'N/A'}
+                                              {evm.prev > 0 ? ((evm.actual / evm.prev)*100).toFixed(1) + '%' : '-'}
                                             </div>
                                             
                                          </div>
@@ -1693,7 +1697,7 @@ const Dashboard = () => {
                          {maximizedPanel === 'drillLoc' && (<>
                            <button onClick={() => capturePanelById('drillLoc', 'province-detail.png')} title="แคปเจอร์เป็นภาพ" style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', color: 'var(--text-primary)', borderRadius: '8px', padding: '0.4rem 0.5rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.8rem', fontFamily: 'Outfit' }}><Camera size={15} /> ภาพ</button>
                            <button onClick={() => {
-                             const rows = (processed?.hierarchicalLocationData || []).flatMap(p => p.offices.map(o => ({ 'จังหวัด': p.name, 'ที่ทำการ': o.name, 'ผลงานจริง': o.actual, 'เป้าหมาย': o.target, '% สำเร็จ': o.target > 0 ? +((o.actual / o.target) * 100).toFixed(1) : 'N/A' })));
+                             const rows = (processed?.hierarchicalLocationData || []).flatMap(p => p.offices.map(o => ({ 'จังหวัด': p.name, 'ที่ทำการ': o.name, 'ผลงานจริง': o.actual, 'เป้าหมาย': o.target, '% สำเร็จ': o.target > 0 ? +((o.actual / o.target) * 100).toFixed(1) : '-' })));
                              exportXLSX(rows, 'province-detail.xlsx');
                            }} title="ดาวน์โหลด Excel" style={{ background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.3)', color: '#10b981', borderRadius: '8px', padding: '0.4rem 0.5rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.8rem', fontFamily: 'Outfit' }}><Download size={15} /> Excel</button>
                          </>)}
@@ -1735,7 +1739,7 @@ const Dashboard = () => {
                                   </div>
                                   <div style={{ textAlign: 'right', fontWeight: 'bold', fontSize: '0.9rem' }}><span title={prov.actual.toLocaleString()}>{formatAmt(prov.actual)}</span></div>
                                   <div style={{ textAlign: 'right', fontWeight: 'bold', fontSize: '0.9rem', color: getPerfColor(prov.actual, prov.target) }}>{pct.toFixed(0)}%</div>
-                                  <div style={{ textAlign: 'right', fontWeight: 'bold', fontSize: '0.9rem', color: prov.prev > 0 && (((prov.actual - prov.prev)/prov.prev)*100) >= 0 ? '#10b981' : '#ef4444' }}>{prov.prev > 0 ? (((prov.actual - prov.prev)/prov.prev)*100).toFixed(1) + '%' : 'N/A'}</div>
+                                  <div style={{ textAlign: 'right', fontWeight: 'bold', fontSize: '0.9rem', color: prov.prev > 0 && ((prov.actual / prov.prev)*100) >= 100 ? '#10b981' : '#ef4444' }}>{prov.prev > 0 ? ((prov.actual / prov.prev)*100).toFixed(1) + '%' : '-'}</div>
                                   
                                </div>
 
@@ -1752,7 +1756,7 @@ const Dashboard = () => {
                                             </div>
                                             <div style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>{formatFullAmt(office.actual)}</div>
                                             <div style={{ textAlign: 'right', color: getPerfColor(office.actual, office.target) }}>{officePct.toFixed(0)}%</div>
-                                            <div style={{ textAlign: 'right', color: office.prev > 0 && (((office.actual - office.prev)/office.prev)*100) >= 0 ? '#10b981' : '#ef4444' }}>{office.prev > 0 ? (((office.actual - office.prev)/office.prev)*100).toFixed(1) + '%' : 'N/A'}</div>
+                                            <div style={{ textAlign: 'right', color: office.prev > 0 && ((office.actual / office.prev)*100) >= 100 ? '#10b981' : '#ef4444' }}>{office.prev > 0 ? ((office.actual / office.prev)*100).toFixed(1) + '%' : '-'}</div>
                                             
                                          </div>
                                       )
@@ -1815,8 +1819,8 @@ const Dashboard = () => {
                               <div style={{ background: 'var(--bg-panel-secondary)', borderTop: '1px solid var(--line-color-faint)', padding: '0.4rem' }}>
                                 {prov.matchingOffices.map((o, oidx) => {
                                    const oc = o.watchStatus.c;
-                                   const pctVal = o.target > 0 ? ((o.actual/o.target)*100).toFixed(1) : '0';
-                                   const yoyVal = o.prev > 0 ? (((o.actual - o.prev) / o.prev) * 100).toFixed(1) : 'N/A';
+                                   const pctVal = o.target > 0 ? ((o.actual/o.target)*100).toFixed(1) : '-';
+                                   const yoyVal = o.prev > 0 ? ((o.actual / o.prev) * 100).toFixed(1) : '-';
                                    return (
                                      <div key={'woff-' + oidx} style={{ padding: '0.4rem 0.25rem', borderBottom: oidx !== prov.matchingOffices.length - 1 ? '1px dashed var(--line-color-faint)' : 'none' }}>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.2rem' }}>
@@ -1826,7 +1830,7 @@ const Dashboard = () => {
                                         <div style={{ fontSize: '0.68rem', color: oc }}>{o.watchStatus.label}</div>
                                         <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.2rem' }}>
                                            <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>Achieved: <b style={{ color: 'var(--text-primary)' }}>{pctVal}%</b></span>
-                                           <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>YoY: <b style={{ color: yoyVal !== 'N/A' && parseFloat(yoyVal) < 0 ? '#ef4444' : '#10b981' }}>{yoyVal !== 'N/A' ? yoyVal + '%' : 'N/A'}</b></span>
+                                           <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>YoY: <b style={{ color: yoyVal !== '-' && parseFloat(yoyVal) < 100 ? '#ef4444' : '#10b981' }}>{yoyVal !== '-' ? yoyVal + '%' : '-'}</b></span>
                                         </div>
                                      </div>
                                    );
