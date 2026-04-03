@@ -130,7 +130,7 @@ const MultiSelect = ({ options, selected, onChange, placeholder, disabled, style
   );
 };
 
-const GaugeChart = ({ title, actual, target, isIncome, theme }) => {
+const GaugeChart = ({ title, actual, target, isIncome, theme, label="เป้าหมาย" }) => {
   const pct = target > 0 ? (actual / target) * 100 : 0;
   
   let color = '#3b82f6';
@@ -176,7 +176,7 @@ const GaugeChart = ({ title, actual, target, isIncome, theme }) => {
         </div>
       </div>
       <div style={{ marginTop: '1rem', fontSize: '0.8rem', color: 'var(--text-secondary)', textAlign: 'center' }}>
-        {target > 0 ? `เป้าหมาย: ${target.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : 'ยังไม่มีข้อมูลเป้าหมาย'}
+        {target > 0 ? `${label}: ${target.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : `ยังไม่มีข้อมูล${label}`}
       </div>
     </div>
   );
@@ -1038,7 +1038,7 @@ const Dashboard = () => {
           <div style="margin-top:5px;font-size:12px;">
             ผลงาน: ฿${data.actual.toLocaleString()}<br/>
             เป้าหมาย: ฿${data.target.toLocaleString()}<br/>
-            ความสำเร็จ: <b style="color:${getPerfColor(data.actual, data.target)}">${pct}%</b>
+            ความสำเร็จ: <b style="color:${getPerfColor(data.actual, data.target)}">${pct === '-' ? '-' : pct + '%'}</b>
           </div>
         </div>
       `;
@@ -1382,7 +1382,7 @@ const Dashboard = () => {
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1rem' }}>
                   <GaugeChart title="เทียบเป้าหมายปีนี้" actual={processed.totals.actual} target={processed.totals.target} isIncome={isIncome} theme={theme} />
-                  <GaugeChart title="เทียบส่วนปีก่อนหน้า" actual={processed.totals.actual} target={processed.totals.prev} isIncome={isIncome} theme={theme} />
+                  <GaugeChart title="เทียบส่วนปีก่อนหน้า" actual={processed.totals.actual} target={processed.totals.prev} isIncome={isIncome} theme={theme} label="ปีก่อน" />
               </div>
             </div>
 
@@ -1654,8 +1654,8 @@ const Dashboard = () => {
                                      <span title={bg.name} style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: maximizedPanel === 'drillBG' ? 'none' : '180px' }}>{bg.name}</span>
                                   </div>
                                   <div style={{ textAlign: 'right', fontWeight: 'bold' }}><span title={bg.actual.toLocaleString()}>{formatAmt(bg.actual)}</span></div>
-                                  <div style={{ textAlign: 'right', fontWeight: 'bold', color: getPerfColor(bg.actual, bg.target) }}>{pct.toFixed(0)}%</div>
-                                  <div style={{ textAlign: 'right', fontWeight: 'bold', color: bg.prev > 0 && (((bg.actual - bg.prev)/bg.prev)*100) >= 0 ? '#10b981' : '#ef4444' }}>
+                                  <div style={{ textAlign: 'right', fontWeight: 'bold', color: getPerfColor(bg.actual, bg.target) }}>{bg.target > 0 ? Math.round(pct) + '%' : '-'}</div>
+                                  <div style={{ textAlign: 'right', fontWeight: 'bold', color: bg.prev > 0 && ((bg.actual / bg.prev)*100) >= 100 ? '#10b981' : '#ef4444' }}>
                                     {bg.prev > 0 ? ((bg.actual / bg.prev)*100).toFixed(1) + '%' : '-'}
                                   </div>
                                   
@@ -1672,8 +1672,8 @@ const Dashboard = () => {
                                               <span title={evm.name} style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: maximizedPanel === 'drillBG' ? 'none' : '160px' }}>{evm.name}</span>
                                             </div>
                                             <div style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>{formatFullAmt(evm.actual)}</div>
-                                            <div style={{ textAlign: 'right', color: getPerfColor(evm.actual, evm.target) }}>{evmPct.toFixed(0)}%</div>
-                                            <div style={{ textAlign: 'right', color: evm.prev > 0 && (((evm.actual - evm.prev)/evm.prev)*100) >= 0 ? '#10b981' : '#ef4444' }}>
+                                            <div style={{ textAlign: 'right', color: getPerfColor(evm.actual, evm.target) }}>{evm.target > 0 ? Math.round(evmPct) + '%' : '-'}</div>
+                                            <div style={{ textAlign: 'right', color: evm.prev > 0 && ((evm.actual / evm.prev)*100) >= 100 ? '#10b981' : '#ef4444' }}>
                                               {evm.prev > 0 ? ((evm.actual / evm.prev)*100).toFixed(1) + '%' : '-'}
                                             </div>
                                             
@@ -1738,7 +1738,7 @@ const Dashboard = () => {
                                      <span title={prov.name} style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: maximizedPanel === 'drillLoc' ? 'none' : '140px' }}>{prov.name}</span>
                                   </div>
                                   <div style={{ textAlign: 'right', fontWeight: 'bold', fontSize: '0.9rem' }}><span title={prov.actual.toLocaleString()}>{formatAmt(prov.actual)}</span></div>
-                                  <div style={{ textAlign: 'right', fontWeight: 'bold', fontSize: '0.9rem', color: getPerfColor(prov.actual, prov.target) }}>{pct.toFixed(0)}%</div>
+                                  <div style={{ textAlign: 'right', fontWeight: 'bold', fontSize: '0.9rem', color: getPerfColor(prov.actual, prov.target) }}>{prov.target > 0 ? Math.round(pct) + '%' : '-'}</div>
                                   <div style={{ textAlign: 'right', fontWeight: 'bold', fontSize: '0.9rem', color: prov.prev > 0 && ((prov.actual / prov.prev)*100) >= 100 ? '#10b981' : '#ef4444' }}>{prov.prev > 0 ? ((prov.actual / prov.prev)*100).toFixed(1) + '%' : '-'}</div>
                                   
                                </div>
@@ -1755,7 +1755,7 @@ const Dashboard = () => {
                                               <span title={office.name} style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: maximizedPanel === 'drillLoc' ? 'none' : '120px' }}>{office.name}</span>
                                             </div>
                                             <div style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>{formatFullAmt(office.actual)}</div>
-                                            <div style={{ textAlign: 'right', color: getPerfColor(office.actual, office.target) }}>{officePct.toFixed(0)}%</div>
+                                            <div style={{ textAlign: 'right', color: getPerfColor(office.actual, office.target) }}>{office.target > 0 ? Math.round(officePct) + '%' : '-'}</div>
                                             <div style={{ textAlign: 'right', color: office.prev > 0 && ((office.actual / office.prev)*100) >= 100 ? '#10b981' : '#ef4444' }}>{office.prev > 0 ? ((office.actual / office.prev)*100).toFixed(1) + '%' : '-'}</div>
                                             
                                          </div>
