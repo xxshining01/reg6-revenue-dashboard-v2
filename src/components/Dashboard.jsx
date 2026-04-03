@@ -457,7 +457,7 @@ const Dashboard = () => {
         if (latestYear) setSelectedYear(latestYear);
 
         const targetProvincesTh = Object.values(PROVINCE_MAP_EN_TH);
-        const provinces = [...new Set(parsed.map(r => r.province))].filter(Boolean).filter(p => targetProvincesTh.includes(p)).sort();
+        const provinces = [...new Set(parsed.map(r => r.province))].filter(Boolean).sort();
         setAvailableProvinces(provinces);
         setAvailableBGs([...new Set(parsed.map(r => r.businessGroup))].filter(Boolean).filter(b => b !== 'อื่นๆ').sort());
         setAvailableEVMs([...new Set(parsed.map(r => r.evmService))].filter(Boolean).filter(e => e !== 'อื่นๆ').sort());
@@ -784,12 +784,16 @@ const Dashboard = () => {
        processed.hierarchicalData.forEach(bg => totalEVMs += (bg.evms ? bg.evms.length : 0));
     }
     
-    if (totalEVMs === 1 || selectedEVM.length === 1) {
-        const singleEVMName = selectedEVM.length === 1 ? selectedEVM[0] : maxEVMName;
-        const evmPctStatus = pct >= 100 ? "ที่น่าพอใจและเป็นบวก" : "ทิศทางที่ต้องผลักดันเพิ่ม";
-        driversStr = <>บริการหลักที่ขับเคลื่อนคือ {h(singleEVMName)} ซึ่งมีผลลัพธ์{evmPctStatus}เมื่อเทียบกับเป้าหมาย</>;
-    } else if (maxBGName !== "ไม่มีข้อมูล" && totalEVMs > 1) {
-        driversStr = <>กลุ่มธุรกิจที่ส่งผลกระทบต่อ{typeStr}มากที่สุดคือ {h(maxBGName)} โดยเฉพาะจากบริการ {h(maxEVMName)} ซึ่งคิดเป็นสัดส่วนถึง {h(maxBGPct.toFixed(1) + '%')} ของยอดรวมในหมวดนี้</>;
+    if (dataSource !== "BI") {
+      if (totalEVMs === 1 || selectedEVM.length === 1) {
+          const singleEVMName = selectedEVM.length === 1 ? selectedEVM[0] : maxEVMName;
+          const evmPctStatus = pct >= 100 ? "ที่น่าพอใจและเป็นบวก" : "ทิศทางที่ต้องผลักดันเพิ่ม";
+          driversStr = <>บริการหลักที่ขับเคลื่อนคือ {h(singleEVMName)} ซึ่งมีผลลัพธ์{evmPctStatus}เมื่อเทียบกับเป้าหมาย</>;
+      } else if (maxBGName !== "ไม่มีข้อมูล" && totalEVMs > 1) {
+          driversStr = <>กลุ่มธุรกิจที่ส่งผลกระทบต่อ{typeStr}มากที่สุดคือ {h(maxBGName)} โดยเฉพาะจากบริการ {h(maxEVMName)} ซึ่งคิดเป็นสัดส่วนถึง {h(maxBGPct.toFixed(1) + "%")} ของยอดรวมในหมวดนี้</>;
+      }
+    } else {
+      driversStr = <>({h("อ้างอิงและประเมินผลงานหลักจากพื้นที่/ที่ทำการ")} เนื่องจากโครงสร้างข้อมูล BI ไม่มีรายละเอียดระดับบริการและกลุ่มธุรกิจ)</>;
     }
 
     // 2.3 Location Insights
@@ -1446,13 +1450,15 @@ const Dashboard = () => {
                 <div style={{ width: '1px', height: '18px', background: 'var(--line-color)' }}></div>
 
                 {/* BG picker */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                  <span style={{ color: 'var(--text-secondary)', fontSize: '0.82rem', whiteSpace: 'nowrap' }}>กลุ่มธุรกิจ</span>
-                  <MultiSelect selected={selectedBG} onChange={setSelectedBG} options={availableBGs.map(b=>({label:b, value:b}))} style={{ minWidth: '150px' }} />
-                </div>
+                {dataSource !== "BI" && (
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                    <span style={{ color: "var(--text-secondary)", fontSize: "0.82rem", whiteSpace: "nowrap" }}>กลุ่มธุรกิจ</span>
+                    <MultiSelect selected={selectedBG} onChange={setSelectedBG} options={availableBGs.map(b=>({label:b, value:b}))} style={{ minWidth: "150px" }} />
+                  </div>
+                )}
 
                 {/* EVM picker */}
-                {selectedBG.length > 0 && (
+                {dataSource !== 'BI' && selectedBG.length > 0 && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                     <span style={{ color: 'var(--text-secondary)', fontSize: '0.82rem', whiteSpace: 'nowrap' }}>EVM</span>
                     <MultiSelect selected={selectedEVM} onChange={setSelectedEVM} options={availableEVMs.map(e=>({label:e, value:e}))} style={{ minWidth: '150px' }} />
@@ -1937,4 +1943,5 @@ const Dashboard = () => {
 };
 
 export default Dashboard;
+
 
