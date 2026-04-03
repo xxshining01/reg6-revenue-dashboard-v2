@@ -854,14 +854,46 @@ const Dashboard = () => {
 
     // 3. Recommendations
     let recStr = null;
-    if (isIncome && pct < 100) {
-      recStr = <>ควรมุ่งเน้นกระตุ้นยอดขายในกลุ่ม <b>{maxBGName}</b> โดยเฉพาะบริการ <b>{maxEVMName}</b> อาจพิจารณาจัดกิจกรรมส่งเสริมการขายเพิ่มเติมเพื่อดึงตัวเลขในเดือนถัดไปให้กลับมาออนแทร็ก</>;
-    } else if (isIncome && pct >= 100) {
-      recStr = <>ผลงานยอดเยี่ยม! ควรศึกษาความสำเร็จของการทำตลาดบริการ <b>{maxEVMName}</b> เพื่อนำไปเป็น Best Practice ขยายผลปรับใช้กับพื้นที่อื่นๆ</>;
-    } else if (!isIncome && pct > 100) {
-      recStr = <span style={{color: '#ef4444'}}>ต้องเฝ้าระวังอย่างเร่งด่วน! แนะนำให้ตรวจสอบรายละเอียดค่าใช้จ่ายในหมวด <b>{maxEVMName}</b> ว่ามีปัจจัยพิเศษใดเกิดขึ้นหรือไม่ เพื่อหาทางควบคุมต้นทุนในช่วงเวลาที่เหลือของปี</span>;
-    } else if (!isIncome && pct <= 100) {
-      recStr = <>บริหารจัดการงบประมาณได้ดีเยี่ยม ควรคงมาตรการควบคุมค่าใช้จ่ายในหมวด <b>{maxBGName}</b> ไว้ตามเดิม</>;
+    if (dataSource !== 'BI') {
+      if (isIncome && pct < 100) {
+        recStr = <>ควรมุ่งเน้นกระตุ้นยอดขายในกลุ่ม <b>{maxBGName}</b> โดยเฉพาะบริการ <b>{maxEVMName}</b> อาจพิจารณาจัดกิจกรรมส่งเสริมการขายเพิ่มเติมเพื่อดึงตัวเลขในเดือนถัดไปให้กลับมาออนแทร็ก</>;
+      } else if (isIncome && pct >= 100) {
+        recStr = <>ผลงานยอดเยี่ยม! ควรศึกษาความสำเร็จของการทำตลาดบริการ <b>{maxEVMName}</b> เพื่อนำไปเป็น Best Practice ขยายผลปรับใช้กับพื้นที่อื่นๆ</>;
+      } else if (!isIncome && pct > 100) {
+        recStr = <span style={{color: '#ef4444'}}>ต้องเฝ้าระวังอย่างเร่งด่วน! แนะนำให้ตรวจสอบรายละเอียดค่าใช้จ่ายในหมวด <b>{maxEVMName}</b> ว่ามีปัจจัยพิเศษใดเกิดขึ้นหรือไม่ เพื่อหาทางควบคุมต้นทุนในช่วงเวลาที่เหลือของปี</span>;
+      } else if (!isIncome && pct <= 100) {
+        recStr = <>บริหารจัดการงบประมาณได้ดีเยี่ยม ควรคงมาตรการควบคุมค่าใช้จ่ายในหมวด <b>{maxBGName}</b> ไว้ตามเดิม</>;
+      }
+    } else {
+      let topProv = "พื้นที่เป้าหมาย";
+      let topOff = "";
+      if (processed.hierarchicalLocationData && processed.hierarchicalLocationData.length > 0) {
+          const tempProvs = [...processed.hierarchicalLocationData].sort((a,b) => {
+              const aGap = isIncome ? a.actual : (a.actual - a.target);  // For income higher is better. For exp, gap is actual - target
+              const bGap = isIncome ? b.actual : (b.actual - b.target);
+              return isIncome ? bGap - aGap : aGap - bGap; // Income: sort descending. Expense: sort ascending (most below target first)
+          });
+          topProv = tempProvs[0].name;
+          if (tempProvs[0].offices && tempProvs[0].offices.length > 0) {
+              const tempOffs = [...tempProvs[0].offices].sort((a,b) => {
+                  const aGap = isIncome ? a.actual : (a.actual - a.target);
+                  const bGap = isIncome ? b.actual : (b.actual - b.target);
+                  return isIncome ? bGap - aGap : aGap - bGap;
+              });
+              topOff = tempOffs[0].name;
+          }
+      }
+      const subjectText = topOff ? `จังหวัด${topProv} โดยเฉพาะที่ทำการ ${topOff}` : `จังหวัด${topProv}`;
+      
+      if (isIncome && pct < 100) {
+        recStr = <>ควรมุ่งเน้นกระตุ้นผลงานในพื้นที่ โดยเฉพาะ <b>{subjectText}</b> อาจพิจารณาประเมินการทำงานเพิ่มเติมเพื่อดึงตัวเลขในเดือนถัดไปให้กลับมาเข้าเป้าหมาย</>;
+      } else if (isIncome && pct >= 100) {
+        recStr = <>ผลงานยอดเยี่ยม! ควรศึกษาความสำเร็จของ <b>{subjectText}</b> เพื่อนำไปเป็น Best Practice ขยายผลปรับใช้กับพื้นที่อื่นๆ</>;
+      } else if (!isIncome && pct > 100) {
+        recStr = <span style={{color: '#ef4444'}}>ต้องเฝ้าระวังอย่างเร่งด่วน! แนะนำให้ตรวจสอบรายละเอียดค่าใช้จ่ายของ <b>{subjectText}</b> ว่ามีปัจจัยพิเศษใดเกิดขึ้นหรือไม่ เพื่อหาทางควบคุมต้นทุนในช่วงเวลาที่เหลือของปี</span>;
+      } else if (!isIncome && pct <= 100) {
+        recStr = <>บริหารจัดการงบประมาณได้ดีเยี่ยม ควรคงมาตรการควบคุมค่าใช้จ่ายในพื้นที่อย่างมีประสิทธิภาพไว้ตามเดิม</>;
+      }
     }
 
     return (
