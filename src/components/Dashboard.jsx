@@ -384,6 +384,9 @@ const Dashboard = () => {
 
   const [rawData, setRawData] = useState([]);
   const [showTrendMoM, setShowTrendMoM] = useState(false);
+  const [showTrendTargetPct, setShowTrendTargetPct] = useState(false);
+  const [showTrendYoYPct, setShowTrendYoYPct] = useState(false);
+  const [mapCompareMode, setMapCompareMode] = useState('target');
   const [dataSource, setDataSource] = useState('BI'); // 'BI' or 'SAP'
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [geoData, setGeoData] = useState(null);
@@ -393,7 +396,8 @@ const Dashboard = () => {
 
   // Filters & State
   const [activeTab, setActiveTab] = useState('income');
-  const [theme, setTheme] = useState('dark');
+  const [showLegend, setShowLegend] = useState(true);
+  const [theme, setTheme] = useState('light');
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [exportMode, setExportMode] = useState('basic');
   const [selectedExportProvinces, setSelectedExportProvinces] = useState([]);
@@ -957,11 +961,11 @@ const Dashboard = () => {
       if (item.target <= 0) return null;
       const pct = (item.actual / item.target) * 100;
       if (isIncome) {
-        if (pct < 70) return { label: 'ติดตามเร่งด่วน', sub: '(< 70%)', val: pct, c: '#ef4444' };
+        if (pct < 70) return { label: 'ติดตามเร่งด่วน', sub: '({'<'} 70%)', val: pct, c: '#ef4444' };
         if (pct < 90) return { label: 'เฝ้าระวัง ติดตามอย่างใกล้ชิด', sub: '(70% - 89.9%)', val: pct, c: '#f97316' };
         if (pct < 100) return { label: 'กลุ่มเสริมทัพเร่งบูรณาการ', sub: '(90% - 99.9%)', val: pct, c: '#facc15' };
       } else {
-        if (pct > 110) return { label: 'ติดตามเร่งด่วน', sub: '(> 110%)', val: pct, c: '#ef4444' };
+        if (pct > 110) return { label: 'ติดตามเร่งด่วน', sub: '({'>'} 110%)', val: pct, c: '#ef4444' };
         if (pct > 100) return { label: 'เฝ้าระวัง ติดตามอย่างใกล้ชิด', sub: '(100.1% - 110%)', val: pct, c: '#f97316' };
         if (pct > 90) return { label: 'กลุ่มเสริมทัพเร่งบูรณาการ', sub: '(90.1% - 100%)', val: pct, c: '#facc15' };
       }
@@ -999,9 +1003,11 @@ const Dashboard = () => {
     const thName = PROVINCE_MAP_EN_TH[feature.properties.NAME_1];
     const data = processed.provinceAgg[thName];
 
-    if (!data || data.target === 0) return { fillColor: theme === 'light' ? '#e2e8f0' : '#333', weight: 1, opacity: 1, color: '#000', fillOpacity: 0.7 };
+    if (!data) return { fillColor: theme === 'light' ? '#e2e8f0' : '#333', weight: 1, opacity: 1, color: '#000', fillOpacity: 0.7 };
+    let baseVal = mapCompareMode === 'target' ? data.target : data.prev;
+    if (!baseVal || baseVal <= 0) return { fillColor: theme === 'light' ? '#e2e8f0' : '#333', weight: 1, opacity: 1, color: '#000', fillOpacity: 0.7 };
 
-    const pct = (data.actual / data.target) * 100;
+    const pct = (data.actual / baseVal) * 100;
     const fillColor = getPercentColor(pct, isIncome);
 
     const isTargetProv = selectedProvince.length === 0 || selectedProvince.includes(thName);
@@ -1016,43 +1022,43 @@ const Dashboard = () => {
     const centroid = getFeatureCentroid(feature);
 
     if (data) {
-      const pct = data.target > 0 ? ((data.actual / data.target) * 100).toFixed(1) : '-';
+      let displayPct = '-';
+      if (mapCompareMode === 'target' && data.target > 0) displayPct = ((data.actual/data.target)*100).toFixed(1) + '%';
+      else if (mapCompareMode === 'yoy' && data.prev !== undefined && data.prev > 0) displayPct = ((data.actual/data.prev)*100).toFixed(1) + '%';
+      
       const abbrev = data.actual >= 1e6 ? (data.actual/1e6).toFixed(1)+'M' : data.actual >= 1e3 ? (data.actual/1e3).toFixed(0)+'K' : data.actual.toFixed(0);
       
-      const labelHtml = `<div style="text-align:center;color:#fff;text-shadow:-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000,0 1px 3px rgba(0,0,0,0.8);font-weight:800;font-size:11px;line-height:1;pointer-events:none;">${thName}<br/><span style="font-size:9px;opacity:0.95;">${abbrev}</span></div>`;
-      
-      // Use centroid for label placement instead of layer center
+      const labelHtml = `<div style="text-align:center;color:#fff;text-shadow:-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000,0 1px 3px rgba(0,0,0,0.8);font-weight:800;font-size:11px;line-height:1;pointer-events:none;">${thName}<br/><span style="font-size:10px;opacity:0.95;color:${displayPct.includes('-') && displayPct !== '-' ? '#fca5a5' : '#86efac'}">${abbrev} (${displayPct})</span></div>`;
+
       if (centroid) {
         const marker = L.marker(centroid, { opacity: 0, interactive: false });
-        marker.bindTooltip(labelHtml, {
-          permanent: true,
-          direction: 'center',
-          className: 'clean-label',
-          opacity: 1
-        });
-        // Attach marker to layer's map when layer is added
-        layer.on('add', function(e) {
-          marker.addTo(e.target._map);
-        });
-        layer.on('remove', function() {
-          marker.remove();
-        });
+        marker.bindTooltip(labelHtml, { permanent: true, direction: 'center', className: 'clean-label', opacity: 1 });
+        layer.on('add', function(e) { marker.addTo(e.target._map); });
+        layer.on('remove', function() { marker.remove(); });
       } else {
-        layer.bindTooltip(labelHtml, {
-          permanent: true,
-          direction: 'center',
-          className: 'clean-label',
-          opacity: 1
-        });
+        layer.bindTooltip(labelHtml, { permanent: true, direction: 'center', className: 'clean-label', opacity: 1 });
       }
 
+      let diffStrTarget = data.target > 0 ? (data.actual - data.target >= 0 ? '+' : '') + (data.actual - data.target).toLocaleString(undefined, {maximumFractionDigits:0}) : '-';
+      let diffStrYoY = (data.prev !== undefined && data.prev !== 0) ? (data.actual - data.prev >= 0 ? '+' : '') + (data.actual - data.prev).toLocaleString(undefined, {maximumFractionDigits:0}) : '-';
+      let pctTarget = data.target > 0 ? ((data.actual/data.target)*100).toFixed(1)+'%' : '-';
+      let pctYoY = (data.prev !== undefined && data.prev !== 0) ? ((data.actual/data.prev)*100).toFixed(1)+'%' : '-';
+
       const popupContent = `
-        <div style="font-family:Outfit,sans-serif;color:#fff;padding:4px;">
-          <b style="font-size:14px;color:${themeColor}">จังหวัด${thName}</b><br/>
-          <div style="margin-top:5px;font-size:12px;">
-            ผลงาน: ฿${data.actual.toLocaleString()}<br/>
-            เป้าหมาย: ฿${data.target.toLocaleString()}<br/>
-            ความสำเร็จ: <b style="color:${getPerfColor(data.actual, data.target)}">${pct === '-' ? '-' : pct + '%'}</b>
+        <div style="font-family:Outfit,sans-serif;color:#fff;padding:8px; width: 220px;">
+          <b style="font-size:15px;color:${themeColor};border-bottom:1px solid rgba(255,255,255,0.2);display:block;padding-bottom:4px;margin-bottom:6px;">จังหวัด${thName}</b>
+          <div style="font-size:13px;line-height:1.6;">
+            <div style="display:flex;justify-content:space-between;"><span>ผลงานจริง:</span> <b>฿${data.actual.toLocaleString(undefined, {maximumFractionDigits:0})}</b></div>
+            <div style="margin-top:6px; background:rgba(0,0,0,0.2); padding:4px 6px; border-radius:4px;">
+              <div style="display:flex;justify-content:space-between;color:rgba(255,255,255,0.8);font-size:12px;"><span>เป้าหมาย</span> <span>฿${data.target.toLocaleString()}</span></div>
+              <div style="display:flex;justify-content:space-between;color:${data.target > 0 ? getPerfColor(data.actual, data.target) : '#aaa'}"><span>ผลต่าง:</span> <b>${diffStrTarget} (${pctTarget})</b></div>
+            </div>
+            ${data.prev !== undefined && data.prev !== 0 ? `
+            <div style="margin-top:6px; background:rgba(0,0,0,0.2); padding:4px 6px; border-radius:4px;">
+              <div style="display:flex;justify-content:space-between;color:rgba(255,255,255,0.8);font-size:12px;"><span>ปีก่อน</span> <span>฿${data.prev.toLocaleString()}</span></div>
+              <div style="display:flex;justify-content:space-between;color:${getPercentColor(((data.actual/data.prev)*100), isIncome)}"><span>ผลต่าง:</span> <b>${diffStrYoY} (${pctYoY})</b></div>
+            </div>
+            ` : ''}
           </div>
         </div>
       `;
@@ -1352,6 +1358,35 @@ const Dashboard = () => {
                <div style={{ margin: 0, color: 'var(--text-primary)', lineHeight: '1.6', fontSize: '0.95rem', width: '100%' }}>
                  {generateAIInsight()}
                </div>
+
+               {/* Legend Container */}
+               <details style={{ background: 'var(--bg-highlight)', borderRadius: '12px', padding: '1rem', border: '1px solid var(--glass-border)', marginTop: '1rem', width: '100%', marginBottom: '0.5rem' }}>
+                 <summary style={{ fontSize: '0.9rem', fontWeight: '600', color: 'var(--text-primary)', cursor: 'pointer', outline: 'none' }}>
+                   เกณฑ์การประเมินผลงาน (Color Indicators)
+                 </summary>
+                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem', marginTop: '0.8rem', fontSize: '0.8rem' }}>
+                   <div style={{ background: 'var(--bg-panel-secondary)', padding: '0.8rem', borderRadius: '8px' }}>
+                     <div style={{ fontWeight: 600, color: '#2dd4bf', marginBottom: '0.5rem' }}>กลุ่มรายได้</div>
+                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><div style={{ width:12, height:12, borderRadius:'50%', background:'#16a34a' }}></div> <span style={{ flex: 1 }}>ยอดเยี่ยม (≥ 110%)</span></div>
+                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><div style={{ width:12, height:12, borderRadius:'50%', background:'#4ade80' }}></div> <span style={{ flex: 1 }}>ดีมาก (100% - 109.9%)</span></div>
+                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><div style={{ width:12, height:12, borderRadius:'50%', background:'#facc15' }}></div> <span style={{ flex: 1 }}>กลุ่มเสริมทัพเร่งบูรณาการ (90% - 99.9%)</span></div>
+                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><div style={{ width:12, height:12, borderRadius:'50%', background:'#f97316' }}></div> <span style={{ flex: 1 }}>เฝ้าระวัง ติดตามอย่างใกล้ชิด (70% - 89.9%)</span></div>
+                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><div style={{ width:12, height:12, borderRadius:'50%', background:'#ef4444' }}></div> <span style={{ flex: 1 }}>ติดตามเร่งด่วน ({'<'} 70%)</span></div>
+                     </div>
+                   </div>
+                   <div style={{ background: 'var(--bg-panel-secondary)', padding: '0.8rem', borderRadius: '8px' }}>
+                     <div style={{ fontWeight: 600, color: '#fb7185', marginBottom: '0.5rem' }}>กลุ่มค่าใช้จ่าย</div>
+                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><div style={{ width:12, height:12, borderRadius:'50%', background:'#16a34a' }}></div> <span style={{ flex: 1 }}>บริหารได้ดีเยี่ยม (≤ 70%)</span></div>
+                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><div style={{ width:12, height:12, borderRadius:'50%', background:'#4ade80' }}></div> <span style={{ flex: 1 }}>ควบคุมได้รัดกุม (70.1% - 90%)</span></div>
+                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><div style={{ width:12, height:12, borderRadius:'50%', background:'#facc15' }}></div> <span style={{ flex: 1 }}>กลุ่มเสริมทัพเร่งบูรณาการ (90.1% - 100%)</span></div>
+                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><div style={{ width:12, height:12, borderRadius:'50%', background:'#f97316' }}></div> <span style={{ flex: 1 }}>เฝ้าระวัง ติดตามอย่างใกล้ชิด (100.1% - 110%)</span></div>
+                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><div style={{ width:12, height:12, borderRadius:'50%', background:'#ef4444' }}></div> <span style={{ flex: 1 }}>ใช้จ่ายเกินงบประมาน ({'>'} 110%)</span></div>
+                     </div>
+                   </div>
+                 </div>
+               </details>
             </div>
           </div>
 
@@ -1370,95 +1405,12 @@ const Dashboard = () => {
              </div>
           </div>
 
-          <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start', flexWrap: 'wrap', justifyContent: 'center' }}>
           
-          {/* LEFT SIDEBAR (Fixed Width) */}
-          <div style={{ flex: '1 1 320px', minWidth: '300px', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-             
-             {/* Totals Block */}
-            <div style={{ 
-              background: `linear-gradient(180deg, ${isIncome ? 'rgba(13,148,136,0.15)' : 'rgba(225,29,72,0.15)'} 0%, ${theme === 'dark' ? 'rgba(9,9,11,0.5)' : 'rgba(255,255,255,0.4)'} 100%)`,
-              border: '1px solid var(--glass-border)', borderRadius: '20px', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem', boxShadow: 'var(--glass-shadow)'
-            }}>
-              <div>
-                <h2 style={{ fontSize: '1.5rem', fontWeight: '700', color: themeColor, marginBottom: '0.25rem' }}>ภาพรวม{isIncome ? 'รายได้' : 'ค่าใช้จ่าย'}</h2>
-                <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>ปี {selectedYear} {selectedMonth.length === 1 ? `เดือน ${MONTH_NAMES[selectedMonth[0]-1]}` : selectedMonth.length > 1 ? `(${selectedMonth.length} เดือน)` : ''}</p>
-              </div>
-
-              <div style={{ background: `rgba(${isIncome ? '45,212,191' : '244,63,94'},0.15)`, padding: '1.25rem', borderRadius: '16px', border: `1px solid ${themeColor}40` }}>
-                <div style={{ color: themeColor, fontSize: '0.875rem', marginBottom: '0.25rem', fontWeight: '500' }}>รวมยอดสะสม</div>
-                <div style={{ fontSize: '2.5rem', fontWeight: '700', color: 'var(--text-primary)' }}><span title={processed.totals.actual.toLocaleString()}>{formatAmt(processed.totals.actual)}</span></div>
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1rem' }}>
-                  <GaugeChart title="เทียบเป้าหมายปีนี้" actual={processed.totals.actual} target={processed.totals.target} isIncome={isIncome} theme={theme} />
-                  <GaugeChart title="เทียบส่วนปีก่อนหน้า" actual={processed.totals.actual} target={processed.totals.prev} isIncome={isIncome} theme={theme} label="ปีก่อน" />
-              </div>
-            </div>
-
-             {/* Top Provinces Map */}
-             <div data-panel-id="map" className="glass-panel" style={maximizedPanel === 'map' ? { position: 'fixed', top: '2rem', left: '2rem', right: '2rem', bottom: '2rem', zIndex: 9999, display: 'flex', flexDirection: 'column', padding: '2rem' } : { padding: '1rem', display: 'flex', flexDirection: 'column', height: '400px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                  <h3 style={{ fontSize: maximizedPanel === 'map' ? '1.5rem' : '1rem', fontWeight: '600', color: 'var(--text-primary)', margin: 0 }}>แผนที่ผลงานจังหวัด</h3>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    {maximizedPanel === 'map' && (<>
-                      <button onClick={() => capturePanelById('map', 'province-map.png')} title="แคปเจอร์เป็นภาพ" style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', color: 'var(--text-primary)', borderRadius: '8px', padding: '0.4rem 0.5rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.8rem', fontFamily: 'Outfit' }}><Camera size={15} /> ภาพ</button>
-                      <button onClick={() => {
-                        const rows = (processed?.hierarchicalLocationData || []).flatMap(p =>
-                          p.offices.map(o => ({
-                            'จังหวัด': p.name,
-                            'ที่ทำการ': o.name,
-                            'ผลงานจริง': o.actual,
-                            'เป้าหมาย': o.target,
-                            '% สำเร็จ': o.target > 0 ? +((o.actual / o.target) * 100).toFixed(1) : '-'
-                          }))
-                        );
-                        exportXLSX(rows, 'province-map-data.xlsx');
-                      }} title="ดาวน์โหลด Excel" style={{ background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.3)', color: '#10b981', borderRadius: '8px', padding: '0.4rem 0.5rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.8rem', fontFamily: 'Outfit' }}><Download size={15} /> Excel</button>
-                    </>)}
-                    <button onClick={() => setMaximizedPanel(maximizedPanel === 'map' ? null : 'map')} style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}>{maximizedPanel === 'map' ? <Minimize2 size={24}/> : <Maximize2 size={18}/>}</button>
-                  </div>
-                </div>
-                <div style={{ flex: 1, borderRadius: '12px', overflow: 'hidden', background: 'var(--bg-panel)' }}>
-                  <MapContainer preferCanvas={true} key={maximizedPanel === 'map' ? 'map-max' : 'map-min'} center={[16.2, 99.8]} zoom={6.5} style={{ height: '100%', width: '100%' }} zoomControl={false} scrollWheelZoom={false}>
-                    <TileLayer url={`https://{s}.basemaps.cartocdn.com/${theme === 'dark' ? 'dark_nolabels' : 'light_nolabels'}/{z}/{x}/{y}{r}.png`} />
-                    {geoData && <GeoJSON key={activeTab + selectedYear + selectedMonth.join(',')} data={geoData} style={getProvinceStyle} onEachFeature={onEachFeature} />}
-                  </MapContainer>
-                </div>
-             </div>
-             
-             {dataSource === 'SAP' && (<>
-{/* Business Group Doughnut */}
-<BusinessGroupDoughnut
-                data={processed?.hierarchicalData}
-                maximizedPanel={maximizedPanel}
-                setMaximizedPanel={setMaximizedPanel}
-                onCapture={() => capturePanelById('donut', 'donut-chart.png')}
-                onExport={() => {
-                  const total = (processed?.hierarchicalData || []).reduce((s, d) => s + d.actual, 0);
-                  const rows = (processed?.hierarchicalData || []).map(bg => ({
-                    'กลุ่มธุรกิจ': bg.name,
-                    'ผลงานจริง': bg.actual,
-                    'เป้าหมาย': bg.target,
-                    '% สำเร็จ': bg.target > 0 ? +((bg.actual / bg.target) * 100).toFixed(1) : '-',
-                    '% ของรวม': total > 0 ? +((bg.actual / total) * 100).toFixed(1) : '-'
-                  }));
-                  exportXLSX(rows, 'business-group-summary.xlsx');
-                }}
-              />
-</>)}
-          </div>
-
-                {/* Maximize Overlay Backdrop */}
-      {maximizedPanel && (
-        <div style={{ fixed: 'position', top:0, left:0, right:0, bottom:0, position: 'fixed', background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', zIndex: 9990 }} onClick={() => setMaximizedPanel(null)} />
-      )}
-
-          {/* MAIN CONTENT AREA */}
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '1rem', minWidth: '600px' }}>
             
-            {/* Top Filter Bar - Chip Based */}
-            <div className="glass-panel" style={{ padding: '0.85rem 1.25rem', display: 'flex', flexDirection: 'column', gap: '0.65rem', borderRadius: '16px', position: 'relative', zIndex: 100 }}>
+            {/* Top Filter Bar - Moved above */}
+          <div className="glass-panel" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.8rem', borderRadius: '16px', position: 'relative', zIndex: 100, marginBottom: '0.5rem' }}>
+             <h3 style={{ fontSize: '1.1rem', fontWeight: '600', color: themeColor, margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}><Filter size={18}/> ส่วนตัวกรองข้อมูล (Filter)</h3>
+             
               
               {/* Row 1: Dropdowns */}
               <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -1559,6 +1511,89 @@ const Dashboard = () => {
               )}
             </div>
 
+          <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start', flexWrap: 'wrap', justifyContent: 'center' }}>
+          
+          {/* LEFT SIDEBAR (Fixed Width) */}
+          <div style={{ flex: '1 1 320px', minWidth: '300px', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+             
+             {/* Totals Block */}
+            <div style={{ 
+              background: `linear-gradient(180deg, ${isIncome ? 'rgba(13,148,136,0.15)' : 'rgba(225,29,72,0.15)'} 0%, ${theme === 'dark' ? 'rgba(9,9,11,0.5)' : 'rgba(255,255,255,0.4)'} 100%)`,
+              border: '1px solid var(--glass-border)', borderRadius: '20px', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem', boxShadow: 'var(--glass-shadow)'
+            }}>
+              <div>
+                <h2 style={{ fontSize: '1.5rem', fontWeight: '700', color: themeColor, marginBottom: '0.25rem' }}>ภาพรวม{isIncome ? 'รายได้' : 'ค่าใช้จ่าย'}</h2>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>ปี {selectedYear} {selectedMonth.length === 1 ? `เดือน ${MONTH_NAMES[selectedMonth[0]-1]}` : selectedMonth.length > 1 ? `(${selectedMonth.length} เดือน)` : ''}</p>
+              </div>
+
+              
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1rem' }}>
+                  <GaugeChart title="เทียบเป้าหมายปีนี้" actual={processed.totals.actual} target={processed.totals.target} isIncome={isIncome} theme={theme} />
+                  <GaugeChart title="เทียบส่วนปีก่อนหน้า" actual={processed.totals.actual} target={processed.totals.prev} isIncome={isIncome} theme={theme} label="ปีก่อน" />
+              </div>
+            </div>
+
+             {/* Top Provinces Map */}
+             <div data-panel-id="map" className="glass-panel" style={maximizedPanel === 'map' ? { position: 'fixed', top: '2rem', left: '2rem', right: '2rem', bottom: '2rem', zIndex: 9999, display: 'flex', flexDirection: 'column', padding: '2rem' } : { padding: '1rem', display: 'flex', flexDirection: 'column', height: '400px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                  <h3 style={{ fontSize: maximizedPanel === 'map' ? '1.5rem' : '1rem', fontWeight: '600', color: 'var(--text-primary)', margin: 0 }}>แผนที่ผลงานจังหวัด</h3>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    {maximizedPanel === 'map' && (<>
+                      <button onClick={() => capturePanelById('map', 'province-map.png')} title="แคปเจอร์เป็นภาพ" style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', color: 'var(--text-primary)', borderRadius: '8px', padding: '0.4rem 0.5rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.8rem', fontFamily: 'Outfit' }}><Camera size={15} /> ภาพ</button>
+                      <button onClick={() => {
+                        const rows = (processed?.hierarchicalLocationData || []).flatMap(p =>
+                          p.offices.map(o => ({
+                            'จังหวัด': p.name,
+                            'ที่ทำการ': o.name,
+                            'ผลงานจริง': o.actual,
+                            'เป้าหมาย': o.target,
+                            '% สำเร็จ': o.target > 0 ? +((o.actual / o.target) * 100).toFixed(1) : '-'
+                          }))
+                        );
+                        exportXLSX(rows, 'province-map-data.xlsx');
+                      }} title="ดาวน์โหลด Excel" style={{ background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.3)', color: '#10b981', borderRadius: '8px', padding: '0.4rem 0.5rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.8rem', fontFamily: 'Outfit' }}><Download size={15} /> Excel</button>
+                    </>)}
+                    <button onClick={() => setMaximizedPanel(maximizedPanel === 'map' ? null : 'map')} style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}>{maximizedPanel === 'map' ? <Minimize2 size={24}/> : <Maximize2 size={18}/>}</button>
+                  </div>
+                </div>
+                <div style={{ flex: 1, borderRadius: '12px', overflow: 'hidden', background: 'var(--bg-panel)' }}>
+                  <MapContainer preferCanvas={true} key={maximizedPanel === 'map' ? 'map-max' : 'map-min'} center={[16.2, 99.8]} zoom={6.5} style={{ height: '100%', width: '100%' }} zoomControl={false} scrollWheelZoom={false}>
+                    <TileLayer url={`https://{s}.basemaps.cartocdn.com/${theme === 'dark' ? 'dark_nolabels' : 'light_nolabels'}/{z}/{x}/{y}{r}.png`} />
+                    {geoData && <GeoJSON key={activeTab + selectedYear + selectedMonth.join(',')} data={geoData} style={getProvinceStyle} onEachFeature={onEachFeature} />}
+                  </MapContainer>
+                </div>
+             </div>
+             
+             {dataSource === 'SAP' && (<>
+{/* Business Group Doughnut */}
+<BusinessGroupDoughnut
+                data={processed?.hierarchicalData}
+                maximizedPanel={maximizedPanel}
+                setMaximizedPanel={setMaximizedPanel}
+                onCapture={() => capturePanelById('donut', 'donut-chart.png')}
+                onExport={() => {
+                  const total = (processed?.hierarchicalData || []).reduce((s, d) => s + d.actual, 0);
+                  const rows = (processed?.hierarchicalData || []).map(bg => ({
+                    'กลุ่มธุรกิจ': bg.name,
+                    'ผลงานจริง': bg.actual,
+                    'เป้าหมาย': bg.target,
+                    '% สำเร็จ': bg.target > 0 ? +((bg.actual / bg.target) * 100).toFixed(1) : '-',
+                    '% ของรวม': total > 0 ? +((bg.actual / total) * 100).toFixed(1) : '-'
+                  }));
+                  exportXLSX(rows, 'business-group-summary.xlsx');
+                }}
+              />
+</>)}
+          </div>
+
+                {/* Maximize Overlay Backdrop */}
+      {maximizedPanel && (
+        <div style={{ fixed: 'position', top:0, left:0, right:0, bottom:0, position: 'fixed', background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', zIndex: 9990 }} onClick={() => setMaximizedPanel(null)} />
+      )}
+
+          {/* MAIN CONTENT AREA */}
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '1rem', minWidth: '600px' }}>
             {/* Monthly Trend Chart */}
             <div data-panel-id="trend" className="glass-panel" style={maximizedPanel === 'trend' ? { position: 'fixed', top: '2rem', left: '2rem', right: '2rem', bottom: '2rem', zIndex: 9999, display: 'flex', flexDirection: 'column', padding: '2rem' } : { padding: '1.25rem', height: '320px', display: 'flex', flexDirection: 'column' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
@@ -1586,11 +1621,38 @@ const Dashboard = () => {
                 </div>
                 <div style={{ flex: 1, minHeight: 0 }}>
                   <ResponsiveContainer width="100%" height="100%">
-                    <ComposedChart data={showTrendMoM ? processed.monthlyData.map((d,i,a) => ({...d, momStr: i>0 && a[i-1].actual>0 ?((d.actual / a[i-1].actual)*100).toFixed(1) + '%' : ''})) : processed.monthlyData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                    <ComposedChart data={processed.monthlyData.map((d,i,a) => ({...d, momStr: (!showTrendMoM) ? '' : (i>0 && a[i-1].actual>0 ?((d.actual / a[i-1].actual)*100).toFixed(1) + '%' : ''), targetPctStr: (!showTrendTargetPct || d.target <= 0) ? '' : ((d.actual / d.target)*100).toFixed(1) + '%', yoyPctStr: (!showTrendYoYPct || d.prev <= 0) ? '' : ((d.actual / d.prev)*100).toFixed(1) + '%' }))} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke={theme === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'} vertical={false} />
                       <XAxis dataKey="name" stroke={theme === 'dark' ? '#a1a1aa' : '#475569'} tick={{ fill: theme === 'dark' ? '#a1a1aa' : '#475569', fontSize: 11 }} axisLine={false} tickLine={false} />
                       <YAxis stroke={theme === 'dark' ? '#a1a1aa' : '#475569'} tick={{ fill: theme === 'dark' ? '#a1a1aa' : '#475569', fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={formatAmt} />
-                      <RechartsTooltip formatter={(v) => formatFullAmt(v)} contentStyle={{ backgroundColor: 'var(--tooltip-bg)', border: 'none', borderRadius: '8px' }} />
+                      <RechartsTooltip content={({ active, payload, label }) => {
+  if (active && payload && payload.length) {
+    const data = payload[0].payload;
+    return (
+      <div style={{ background: 'var(--tooltip-bg)', border: '1px solid var(--glass-border)', padding: '10px', borderRadius: '8px', color: 'var(--text-primary)', fontSize: '0.85rem' }}>
+        <p style={{ margin: '0 0 5px 0', fontWeight: 'bold' }}>{label}</p>
+        <p style={{ margin: '2px 0', color: themeColor }}>ผลงานจริง: {formatFullAmt(data.actual)}</p>
+        {data.target > 0 && (
+          <p style={{ margin: '4px 0 2px 0', color: 'var(--text-secondary)' }}>
+            เป้าหมาย: {formatFullAmt(data.target)} <br/>
+            ส่วนต่าง: <span style={{ color: (data.actual - data.target) >= 0 ? '#10b981' : '#ef4444', fontWeight: 'bold' }}>
+              {(data.actual - data.target) >= 0 ? '+' : ''}{formatFullAmt(data.actual - data.target)} ({((data.actual/data.target)*100).toFixed(1)}%)
+            </span>
+          </p>
+        )}
+        {data.prev !== undefined && data.prev !== 0 && (
+          <p style={{ margin: '4px 0 2px 0', color: 'var(--text-secondary)' }}>
+            ปีก่อน: {formatFullAmt(data.prev)} <br/>
+            ส่วนต่าง: <span style={{ color: (data.actual - data.prev) >= 0 ? '#10b981' : '#ef4444', fontWeight: 'bold' }}>
+              {(data.actual - data.prev) >= 0 ? '+' : ''}{formatFullAmt(data.actual - data.prev)} ({((data.actual/data.prev)*100).toFixed(1)}%)
+            </span>
+          </p>
+        )}
+      </div>
+    );
+  }
+  return null;
+}} />
                       <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
                       <Bar dataKey="actual" name="ผลงาน" fill={themeColor} radius={[4, 4, 0, 0]} barSize={35}>
                         {showTrendMoM && <LabelList dataKey="momStr" position="top" style={{ fill: theme === 'dark' ? '#a1a1aa' : '#475569', fontSize: 10, fontWeight: 600 }} />}
@@ -1664,8 +1726,8 @@ const Dashboard = () => {
                                      <span title={bg.name} style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: maximizedPanel === 'drillBG' ? 'none' : '180px' }}>{bg.name}</span>
                                   </div>
                                   <div style={{ textAlign: 'right', fontWeight: 'bold' }}><span title={bg.actual.toLocaleString()}>{formatAmt(bg.actual)}</span></div>
-                                  <div style={{ textAlign: 'right', fontWeight: 'bold', color: getPerfColor(bg.actual, bg.target) }}>{bg.target > 0 ? Math.round(pct) + '%' : '-'}</div>
-                                  <div style={{ textAlign: 'right', fontWeight: 'bold', color: bg.prev !== 0 ? getPercentColor((bg.actual / bg.prev)*100, isIncome) : 'var(--text-secondary)' }}>
+                                  <div title={bg.target > 0 ? `เป้าหมาย: ${formatFullAmt(bg.target)}\nผลต่าง: ${bg.actual - bg.target >= 0 ? '+' : ''}${formatFullAmt(bg.actual - bg.target)}` : ''} style={{ textAlign: 'right', fontWeight: 'bold', color: getPerfColor(bg.actual, bg.target) }}>{bg.target > 0 ? pct.toFixed(1) + '%' : '-'}</div>
+                                  <div title={bg.prev !== 0 ? `ปีก่อน: ${formatFullAmt(bg.prev)}\nผลต่าง: ${bg.actual - bg.prev >= 0 ? '+' : ''}${formatFullAmt(bg.actual - bg.prev)}` : ''} style={{ textAlign: 'right', fontWeight: 'bold', color: bg.prev !== 0 ? getPercentColor((bg.actual / bg.prev)*100, isIncome) : 'var(--text-secondary)' }}>
                                     {bg.prev !== 0 ? ((bg.actual / bg.prev)*100).toFixed(1) + '%' : '-'}
                                   </div>
                                   
@@ -1682,8 +1744,8 @@ const Dashboard = () => {
                                               <span title={evm.name} style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: maximizedPanel === 'drillBG' ? 'none' : '160px' }}>{evm.name}</span>
                                             </div>
                                             <div style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>{formatFullAmt(evm.actual)}</div>
-                                            <div style={{ textAlign: 'right', color: getPerfColor(evm.actual, evm.target) }}>{evm.target > 0 ? Math.round(evmPct) + '%' : '-'}</div>
-                                            <div style={{ textAlign: 'right', color: evm.prev !== 0 ? getPercentColor((evm.actual / evm.prev)*100, isIncome) : 'var(--text-secondary)' }}>
+                                            <div title={evm.target > 0 ? `เป้าหมาย: ${formatFullAmt(evm.target)}\nผลต่าง: ${evm.actual - evm.target >= 0 ? '+' : ''}${formatFullAmt(evm.actual - evm.target)}` : ''} style={{ textAlign: 'right', color: getPerfColor(evm.actual, evm.target) }}>{evm.target > 0 ? evmPct.toFixed(1) + '%' : '-'}</div>
+                                            <div title={evm.prev !== 0 ? `ปีก่อน: ${formatFullAmt(evm.prev)}\nผลต่าง: ${evm.actual - evm.prev >= 0 ? '+' : ''}${formatFullAmt(evm.actual - evm.prev)}` : ''} style={{ textAlign: 'right', color: evm.prev !== 0 ? getPercentColor((evm.actual / evm.prev)*100, isIncome) : 'var(--text-secondary)' }}>
                                               {evm.prev !== 0 ? ((evm.actual / evm.prev)*100).toFixed(1) + '%' : '-'}
                                             </div>
                                             
@@ -1748,8 +1810,8 @@ const Dashboard = () => {
                                      <span title={prov.name} style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: maximizedPanel === 'drillLoc' ? 'none' : '140px' }}>{prov.name}</span>
                                   </div>
                                   <div style={{ textAlign: 'right', fontWeight: 'bold', fontSize: '0.9rem' }}><span title={prov.actual.toLocaleString()}>{formatAmt(prov.actual)}</span></div>
-                                  <div style={{ textAlign: 'right', fontWeight: 'bold', fontSize: '0.9rem', color: getPerfColor(prov.actual, prov.target) }}>{prov.target > 0 ? Math.round(pct) + '%' : '-'}</div>
-                                  <div style={{ textAlign: 'right', fontWeight: 'bold', fontSize: '0.9rem', color: prov.prev !== 0 ? getPercentColor((prov.actual / prov.prev)*100, isIncome) : 'var(--text-secondary)' }}>{prov.prev !== 0 ? ((prov.actual / prov.prev)*100).toFixed(1) + '%' : '-'}</div>
+                                  <div title={prov.target > 0 ? `เป้าหมาย: ${formatFullAmt(prov.target)}\nผลต่าง: ${prov.actual - prov.target >= 0 ? '+' : ''}${formatFullAmt(prov.actual - prov.target)}` : ''} style={{ textAlign: 'right', fontWeight: 'bold', fontSize: '0.9rem', color: getPerfColor(prov.actual, prov.target) }}>{prov.target > 0 ? pct.toFixed(1) + '%' : '-'}</div>
+                                  <div title={prov.prev !== 0 ? `ปีก่อน: ${formatFullAmt(prov.prev)}\nผลต่าง: ${prov.actual - prov.prev >= 0 ? '+' : ''}${formatFullAmt(prov.actual - prov.prev)}` : ''} style={{ textAlign: 'right', fontWeight: 'bold', fontSize: '0.9rem', color: prov.prev !== 0 ? getPercentColor((prov.actual / prov.prev)*100, isIncome) : 'var(--text-secondary)' }}>{prov.prev !== 0 ? ((prov.actual / prov.prev)*100).toFixed(1) + '%' : '-'}</div>
                                   
                                </div>
 
@@ -1765,8 +1827,8 @@ const Dashboard = () => {
                                               <span title={office.name} style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: maximizedPanel === 'drillLoc' ? 'none' : '120px' }}>{office.name}</span>
                                             </div>
                                             <div style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>{formatFullAmt(office.actual)}</div>
-                                            <div style={{ textAlign: 'right', color: getPerfColor(office.actual, office.target) }}>{office.target > 0 ? Math.round(officePct) + '%' : '-'}</div>
-                                            <div style={{ textAlign: 'right', color: office.prev !== 0 ? getPercentColor((office.actual / office.prev)*100, isIncome) : 'var(--text-secondary)' }}>{office.prev !== 0 ? ((office.actual / office.prev)*100).toFixed(1) + '%' : '-'}</div>
+                                            <div title={office.target > 0 ? `เป้าหมาย: ${formatFullAmt(office.target)}\nผลต่าง: ${office.actual - office.target >= 0 ? '+' : ''}${formatFullAmt(office.actual - office.target)}` : ''} style={{ textAlign: 'right', color: getPerfColor(office.actual, office.target) }}>{office.target > 0 ? officePct.toFixed(1) + '%' : '-'}</div>
+                                            <div title={office.prev !== 0 ? `ปีก่อน: ${formatFullAmt(office.prev)}\nผลต่าง: ${office.actual - office.prev >= 0 ? '+' : ''}${formatFullAmt(office.actual - office.prev)}` : ''} style={{ textAlign: 'right', color: office.prev !== 0 ? getPercentColor((office.actual / office.prev)*100, isIncome) : 'var(--text-secondary)' }}>{office.prev !== 0 ? ((office.actual / office.prev)*100).toFixed(1) + '%' : '-'}</div>
                                             
                                          </div>
                                       )
